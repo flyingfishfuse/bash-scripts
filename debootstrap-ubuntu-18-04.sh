@@ -11,8 +11,7 @@
 ##   -e, --extra LIST         Space seperated list of extra packages to install (Default: lolcat)
 ##   -m, --smacaddress MAC    MAC Address of the Sandbox                        (Default: de:ad:be:ef:ca:fe)
 ##   -i, --sipaddress IP      IP Address of the Sandbox                         (Default: 192.168.0.3)
-##
-##
+##   -h, --sifacename IFACE   Interface name for the Sandbox                    (Default: hakc1)
 ## Commands:
 ##   -h, --help             Displays this help and exists <-- no existential crisis here!
 ##   -v, --version          Displays output version and exits
@@ -47,15 +46,21 @@ password()
 }
 extra()
 {
+	#Watch'ya watch'ya watch'ya want, watch'ya WANT?!?
 	EXTRA_PACKAGES='lolcat'
 }
-macaddress()
+sifacename()
 {
-	IF_EXT_MAC='de:ad:be:ef:ca:fe'
+	#SANDBOX external network interface configuration
+	IF_SB_NAME='hakc1'
 }
-ipaddress()
+smacaddress()
 {
-	IF_EXT_IP='192.168.1.3'
+	IF_SB_MAC='de:ad:be:ef:ca:fe'
+}
+sipaddress()
+{
+	IF_SB_IP='192.168.1.3'
 }
 #greps all "##" at the start of a line and displays it in the help text
 help() {
@@ -110,18 +115,16 @@ SANDBOX='/home/moop/Desktop/SANDBOX'
 ARCH='amd64'
 COMPONENTS='main,contrib,universe,multiverse'
 REPOSITORY='http://archive.ubuntu.com/ubuntu/'
-#SANDBOX external network interface configuration
-IF_EXT_NAME='hakc1'
 #HOST network interface configuration that connects to SANDBOX
+#in my test this is a Wireless-N Range extender with OpenWRT connected through a Ethernet to USB connector
 INT_ROUTE='enx000ec6527123'
 INT_IP='192.168.1.161'
 #HOST network interface configuration that connects to Command and Control 
+#This is the desktop workstation you aren't using this script on because its stupid to do that.
 IF_CNC='eth0'
 IF_IP_CNC='192.168.0.44'_
-#internet access for the LAN
+#internet access for the LAN, This is your internet router.
 GATEWAY='192.168.0.1'
-#Watch'ya watch'ya watch'ya want, watch'ya WANT?!?
-EXTRA_PACKAGES='lolcat'
 error_exit()
 {
 	echo "$1" 1>&2 >> $LOGFILE
@@ -172,34 +175,40 @@ deboot_third_stage()
 create_iface_ipr1()
 {
 	sudo -S modprobe dummy
-	sudo -S ip link set name ${IF_NAME} dev dummy0
-	sudo -S ifconfig ${IF_NAME} hw ether ${IF_MAC}
+	sudo -S ip link set name $IF_SB_NAME dev dummy0
+	sudo -S ifconfig $IF_SB_NAME hw ether $IF_SB_MAC
 }
 #Makes an interface with iproute2
 create_iface_ipr2()
 {
-	ip link add ${IF_NAME} type veth
+	ip link add $IF_SB_NAME type veth
 }
 del_iface1()
 {
-	sudo -S ip addr del ${IF_IP}/24 brd + dev ${IF_NAME}
-	sudo -S ip link delete ${IF_NAME} type dummy
+	sudo -S ip addr del $IF_SB_IP/24 brd + dev $IF_SB_NAME
+	sudo -S ip link delete $IF_SB_NAME type dummy
 	sudo -S rmmod dummy
 }
+#Delets the SANDBOX Interface
 del_iface2()
 {
-	ip link del ${IF_NAME}
+	ip link del $IF_SB_NAME
 }
 #run this from the HOST
+setup_host_networking()
+{
+	#Allow forwarding on HOST IFACE
+	sysctl -w net.ipv4.conf.$HOST_IF_NAME.forwarding=1
+}
 connect_sandbox()
 {
 	#Allow forwarding on Sandbox IFACE
-	sysctl -w net.ipv4.conf.${IF_NAME}.forwarding=1
+	sysctl -w net.ipv4.conf.$IF_SB_NAME.forwarding=1
 	#Allow forwarding on Host IFACE
 	#Allow from sandbox to outside
-	iptables -A FORWARD -i ${IF_NAME} -o ${INT_ROUTE} -j ACCEPT
+	iptables -A FORWARD -i $IF_SB_NAME -o $INT_ROUTE -j ACCEPT
 	#Allow from outside to sandbox
-	iptables -A FORWARD -i ${INT_ROUTE} -o ${IF_NAME} -j ACCEPT
+	iptables -A FORWARD -i $INT_ROUTE -o $IF_SB_NAME -j ACCEPT
 }
 #run this from the Host AND the Sandbox
 establish_network()
