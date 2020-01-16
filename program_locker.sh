@@ -52,12 +52,52 @@ while [ $# -gt 0 ]; do
   if [ -z "$CMD" ]; then echo "ERROR: Command '$1' not supported"; exit 1; fi
   shift; eval "$CMD" $@ || shift $? 2> /dev/null
 
-echo"=================================================="
-echo"=================================================="
-echo"==========MAKE SURE THIS IS CORRECT!!!!!=========="
-echo"=================================================="
-echo"==================================================\n\n"
-echo "${USER} ALL=(root) ${PROGRAM}"
+#=========================================================
+#            Colorization stuff
+#=========================================================
+black='\E[30;47m'
+red='\E[31;47m'
+green='\E[32;47m'
+yellow='\E[33;47m'
+blue='\E[34;47m'
+magenta='\E[35;47m'
+cyan='\E[36;47m'
+white='\E[37;47m'
+
+# Reset text attributes to normal
+# without clearing screen.
+alias Reset="tput sgr0"
+
+# Argument $1 = message
+# Argument $2 = color
+cecho ()
+{
+	local default_msg="No message passed."
+	#message is first argument OR default
+	message=${1:-$default_msg}
+	# color is second argument OR white
+	color=${2:$white}
+	if [$color='lolz']
+	then
+		echo $message | lolcat
+		return
+	else
+		local default_msg="No message passed."
+		# Doesn't really need to be a local variable.
+		message=${1:-$default_msg}   # Defaults to default message.
+		color=${2:-$black}           # Defaults to black, if not specified.
+		echo -e "$color"
+		echo "$message"
+		Reset                      # Reset to normal.
+		return
+}  
+
+cecho"==================================================" "lolz"
+cecho"==================================================" "lolz"
+cecho"==========MAKE SURE THIS IS CORRECT!!!!!==========" $red
+cecho"==================================================" "lolz"
+cecho"==================================================\n\n" "lolz"
+cecho "${USER} ALL=(root) ${PROGRAM}"
 
 locker()
 {
@@ -76,7 +116,7 @@ do
             locker
             break;;
         no) 
-            echo "Looks like something is preventing the script from working right\n you have to this manually"
+            cecho "Looks like something is preventing the script from working right\n you have to this manually" $yellow
             break;;
         quit)
         	break;;
