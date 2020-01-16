@@ -4,14 +4,19 @@
 ## 
 ## Usage: $PROG [OPTION...] [COMMAND]...
 ## Options:
-##   -l, --log-info           Set log level to info        (default)
-##   -q, --log-quiet          Set log level to quiet       (not implemented yet)
+##   -i, --log-info           Set log level to info                             (Default)
+##   -q, --log-quiet          Set log level to quiet                            (not implemented yet)
 ##   -u, --user USER          The username to be created                        (Default: moop)
 ##   -p, --password PASS      The password to said username                     (Default: password)
 ##   -e, --extra LIST         Space seperated list of extra packages to install (Default: lolcat)
 ##   -m, --smacaddress MAC    MAC Address of the Sandbox                        (Default: de:ad:be:ef:ca:fe)
 ##   -i, --sipaddress IP      IP Address of the Sandbox                         (Default: 192.168.0.3)
 ##   -h, --sifacename IFACE   Interface name for the Sandbox                    (Default: hakc1)
+##   -l, --sandbox_location   Full Path of the Sandbox                          (Default: /home/moop/Desktop/sandbox)
+##   -a, --architecture       AMD64, X86, ARM, what-have-you                    (Default: amd64)
+##   -c, --compenent          Which repository components are included          (Default: main,contrib,universe,multiverse)
+##   -r, --repositorie        The Debian-based repository. E.g. "Ubuntu"        (Default: http://archive.ubuntu.com/ubuntu/)
+##
 ## Commands:
 ##   -h, --help             Displays this help and exists <-- no existential crisis here!
 ##   -v, --version          Displays output version and exits
@@ -52,15 +57,31 @@ extra()
 sifacename()
 {
 	#SANDBOX external network interface configuration
-	IF_SB_NAME='hakc1'
+	SANDBOX_IFACE_NAME='hakc1'
 }
 smacaddress()
 {
-	IF_SB_MAC='de:ad:be:ef:ca:fe'
+	SANDBOX_MAC_ADDRESS='de:ad:be:ef:ca:fe'
 }
 sipaddress()
 {
-	IF_SB_IP='192.168.1.3'
+	SANDBOX_IP_ADDRESS='192.168.1.3'
+}
+sandbox_location()
+{
+	SANDBOX='/home/moop/Desktop/SANDBOX'
+}
+architecture()
+{
+	ARCH='amd64'
+}
+component()
+{
+	COMPONENTS='main,contrib,universe,multiverse'
+}
+respositorie()
+{
+	REPOSITORY='http://archive.ubuntu.com/ubuntu/'
 }
 #greps all "##" at the start of a line and displays it in the help text
 help() {
@@ -90,20 +111,28 @@ cyan='\E[36;47m'
 white='\E[37;47m'
 alias Reset="tput sgr0"      #  Reset text attributes to normal
                              #+ without clearing screen.
-
-
 cecho ()
 {
 	# Argument $1 = message
 	# Argument $2 = color
 	local default_msg="No message passed."
-	# Doesn't really need to be a local variable.
-	message=${1:-$default_msg}   # Defaults to default message.
-	color=${2:-$black}           # Defaults to black, if not specified.
-	echo -e "$color"
-	echo "$message"
-	Reset                      # Reset to normal.
-	return
+	#message is first argument OR default
+	message=${1:-$default_msg}
+	# color is second argument OR white
+	color=${2:$white}
+	if [$color='lolz']
+	then
+		echo $message | lolcat
+		return
+	else
+		local default_msg="No message passed."
+		# Doesn't really need to be a local variable.
+		message=${1:-$default_msg}   # Defaults to default message.
+		color=${2:-$black}           # Defaults to black, if not specified.
+		echo -e "$color"
+		echo "$message"
+		Reset                      # Reset to normal.
+		return
 }  
 
 echo "======================================================================="
@@ -111,13 +140,9 @@ echo "=================--Debo0tstrap Chro0t Generat0r--======================"
 echo "======================================================================="
 echo "==="
 LOGFILE='./debootstrap_log.txt'
-SANDBOX='/home/moop/Desktop/SANDBOX'
-ARCH='amd64'
-COMPONENTS='main,contrib,universe,multiverse'
-REPOSITORY='http://archive.ubuntu.com/ubuntu/'
 #HOST network interface configuration that connects to SANDBOX
 #in my test this is a Wireless-N Range extender with OpenWRT connected through a Ethernet to USB connector
-INT_ROUTE='enx000ec6527123'
+HOST_IFACE_NAME='enx000ec6527123'
 INT_IP='192.168.1.161'
 #HOST network interface configuration that connects to Command and Control 
 #This is the desktop workstation you aren't using this script on because its stupid to do that.
@@ -135,14 +160,14 @@ deboot_first_stage()
 	echo "[+] Beginning Debootstrap" | lolcat
 	sudo debootstrap --components $COMPONENTS --arch $ARCH bionic $SANDBOX $REPOSITORY >> $LOGFILE
 	if [ "$?" = "0" ]; then
-	    echo "[+] Debootstrap Finished Successfully!" | lolcat
+	    cecho "[+] Debootstrap Finished Successfully!" lolcat
 	else
 		error_exit "[-]Debootstrap Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	fi
 	echo "[+] Copying Resolv.conf" | lolcat
 	sudo cp /etc/resolv.conf $SANDBOX/etc/resolv.conf
 	if [ "$?" = "0" ]; then
-	    echo "[+] Resolv.conf copied!" | lolcat
+	    cecho "[+] Resolv.conf copied!" | lolcat 
 	else
 		error_exit "[-]Copy Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	fi
@@ -175,42 +200,48 @@ deboot_third_stage()
 create_iface_ipr1()
 {
 	sudo -S modprobe dummy
-	sudo -S ip link set name $IF_SB_NAME dev dummy0
-	sudo -S ifconfig $IF_SB_NAME hw ether $IF_SB_MAC
+	sudo -S ip link set name $SANDBOX_IFACE_NAME dev dummy0
+	sudo -S ifconfig $SANDBOX_IFACE_NAME hw ether $SANDBOX_MAC_ADDRESS
 }
 #Makes an interface with iproute2
 create_iface_ipr2()
 {
-	ip link add $IF_SB_NAME type veth
+	ip link add $SANDBOX_IFACE_NAME type veth
 }
 del_iface1()
 {
-	sudo -S ip addr del $IF_SB_IP/24 brd + dev $IF_SB_NAME
-	sudo -S ip link delete $IF_SB_NAME type dummy
+	sudo -S ip addr del $SANDBOX_IP_ADDRESS/24 brd + dev $SANDBOX_IFACE_NAME
+	sudo -S ip link delete $SANDBOX_IFACE_NAME type dummy
 	sudo -S rmmod dummy
 }
 #Delets the SANDBOX Interface
 del_iface2()
 {
-	ip link del $IF_SB_NAME
+	ip link del $SANDBOX_IFACE_NAME
 }
 #run this from the HOST
 setup_host_networking()
 {
 	#Allow forwarding on HOST IFACE
 	sysctl -w net.ipv4.conf.$HOST_IF_NAME.forwarding=1
+	#Allow from sandbox to outside
+	iptables -A FORWARD -i $SANDBOX_IFACE_NAME -o $HOST_IFACE_NAME -j ACCEPT
+	#Allow from outside to sandbox
+	iptables -A FORWARD -i $HOST_IFACE_NAME -o $SANDBOX_IFACE_NAME -j ACCEPT
 }
-connect_sandbox()
+#this is a seperate "computer", The following is in case you want to setup another
+#virtual computer inside this one and allow to the outside
+sandbox_forwarding()
 {
 	#Allow forwarding on Sandbox IFACE
-	sysctl -w net.ipv4.conf.$IF_SB_NAME.forwarding=1
+	#sysctl -w net.ipv4.conf.$SANDBOX_IFACE_NAME.forwarding=1
 	#Allow forwarding on Host IFACE
 	#Allow from sandbox to outside
-	iptables -A FORWARD -i $IF_SB_NAME -o $INT_ROUTE -j ACCEPT
+	#iptables -A FORWARD -i $SANDBOX_IFACE_NAME -o $HOST_IFACE_NAME -j ACCEPT
 	#Allow from outside to sandbox
-	iptables -A FORWARD -i $INT_ROUTE -o $IF_SB_NAME -j ACCEPT
+	#iptables -A FORWARD -i $HOST_IFACE_NAME -o $SANDBOX_IFACE_NAME -j ACCEPT
 }
-#run this from the Host AND the Sandbox
+#run this from the Host
 establish_network()
 {
 	# 1. Delete all existing rules
@@ -225,9 +256,31 @@ establish_network()
 	# Allow incoming HTTPS
 	iptables -A INPUT -i eth0 -p tcp --dport 443 -m state --state NEW,ESTABLISHED -j ACCEPT
 	iptables -A OUTPUT -o eth0 -p tcp --sport 443 -m state --state ESTABLISHED -j ACCEPT
+	# 19. Allow MySQL connection only from a specific network
+#iptables -A INPUT -i eth0 -p tcp -s 192.168.200.0/24 --dport 3306 -m state --state NEW,ESTABLISHED -j ACCEPT
+#iptables -A OUTPUT -o eth0 -p tcp --sport 3306 -m state --state ESTABLISHED -j ACCEPT
+# 23. Prevent DoS attack
+iptables -A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT
 
 
 
 
 }
+############################
+##--	Menu System		--##
+############################
+
+PS3="Choose your doom"
+select option in sandbox_connect setup_network quit
+do
+	case $option in
+    	sandbox_connect) 
+			connect_sandbox
+        setup_network) 
+            establish_network
+        quit)
+        	break;;
+    esac
+done
+
 exit
