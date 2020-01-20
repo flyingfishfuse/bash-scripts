@@ -1,7 +1,9 @@
 #!/bin/bash
 ## $PROG 1.0 - Print logs [2017-10-01] // Debo0tstrap Chro0t Generat0r v1 // 
 ## Compatible with bash and dash/POSIX
-## 
+##  This program makes a complete APT based distro in a folder and moves it to a disk
+##  Of your choosing OR it can make a network accessible sandbox for you to do whatever in.
+##  DO NOT WALK AWAY FROM THIS PROGRAM OR YOU WILL REGRET IT!
 ## Usage: $PROG [OPTION...] [COMMAND]...
 ## Options:
 ##   -i, --log-info           Set log level to info                             (Default)
@@ -13,9 +15,10 @@
 ##   -i, --sipaddress IP      IP Address of the Sandbox                         (Default: 192.168.0.3)
 ##   -h, --sifacename IFACE   Interface name for the Sandbox                    (Default: hakc1)
 ##   -l, --sandbox_location   Full Path of the Sandbox                          (Default: /home/moop/Desktop/sandbox)
-##   -a, --architecture       AMD64, X86, ARM, what-have-you                    (Default: amd64)
-##   -c, --compenent          Which repository components are included          (Default: main,contrib,universe,multiverse)
-##   -r, --repositorie        The Debian-based repository. E.g. "Ubuntu"        (Default: http://archive.ubuntu.com/ubuntu/)
+##   -a, --architecture ARCH  AMD64, X86, ARM, what-have-you                    (Default: amd64)
+##   -c, --compenent COMPO    Which repository components are included          (Default: main,contrib,universe,multiverse)
+##   -r, --repositorie REPO   The Debian-based repository. E.g. "Ubuntu"        (Default: http://archive.ubuntu.com/ubuntu/)
+##   -d, --device DEVICE      The device to install the Distro to               (Default: NONE THATS DANGEROUS!)
 ##
 ## Commands:
 ##   -h, --help             Displays this help and exists <-- no existential crisis here!
@@ -190,12 +193,55 @@ deboot_second_stage()
 	#sudo -S locale-gen en_US.UTF-8  # or your preferred locale
 	#tzselect; TZ='Continent/Country'; export TZ  #Configure and use our local time instead of UTC; save in .profile
 }
-#begin setting up services
+
+# begin setting up services
+# TOFU: make a list of conf files needing to be changed 
+# and have them ready to be opened one by one
+# OR have them applied from a formatted file
 deboot_third_stage()
 {
 
 	sudo -S apt install $EXTRA_PACKAGES
+
 }
+
+# TOFOMOFO: check for disk space and throw a warning if needed 
+setup_disk()
+{
+
+    parted /dev/sde --script mkpart EFI fat16 1MiB 10MiB
+    parted /dev/sde --script mkpart live fat16 10MiB 3GiB
+    parted /dev/sde --script mkpart persistence ext4 3GiB 100%  
+    parted /dev/sde --script set 1 msftdata on
+    parted /dev/sde --script set 2 legacy_boot on
+    parted /dev/sde --script set 2 msftdata on
+
+    mkfs.vfat -n EFI /dev/sdX1
+    mkfs.vfat -n LIVE /dev/sdX2
+    mkfs.ext4 -F -L persistence /dev/sde3
+
+    mkdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
+    mount /dev/sdf1 /tmp/usb-efi
+    mount /dev/sdf2 /tmp/usb-live
+    mount /dev/sdf3 /tmp/usb-persistence
+    mount -oro live.iso /tmp/live-iso
+    cp -ar /tmp/live-iso/* /tmp/usb-live
+    echo "/ union" > /tmp/usb-persistence/persistence.conf
+    grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/sdX
+    dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of=/dev/sdX
+    syslinux --install /dev/sdX2
+    mv /tmp/usb-live/isolinux /tmp/usb-live/syslinux
+    mv /tmp/usb-live/syslinux/isolinux.bin /tmp/usb-live/syslinux/syslinux.bin
+    mv /tmp/usb-live/syslinux/isolinux.cfg /tmp/usb-live/syslinux/syslinux.cfg
+    sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
+    sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 persistence/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
+    sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 keyboard-layouts=en locales=en_US/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
+    sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
+    umount /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
+    rmdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
+
+}
+
 #Makes an interface with iproute1
 create_iface_ipr1()
 {
