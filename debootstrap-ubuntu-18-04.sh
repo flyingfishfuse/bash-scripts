@@ -4,6 +4,7 @@
 ##  This program makes a complete APT based distro in a folder and moves it to a disk
 ##  Of your choosing OR it can make a network accessible sandbox for you to do whatever in.
 ##  DO NOT WALK AWAY FROM THIS PROGRAM OR YOU WILL REGRET IT!
+## CURRENTLY ONLY 64-BIT BOOTLOADER IS WORKING
 ## Usage: $PROG [OPTION...] [COMMAND]...
 ## Options:
 ##   -i, --log-info           Set log level to info                             (Default)
@@ -259,94 +260,59 @@ setup_disk()
 
     # Install GRUB2
     # https://en.wikipedia.org/wiki/GNU_GRUB
-    ## Script supported targets: arm-efi, arm64-efi, x86_64-efi, i386-pc, i386-efi
-    #
+    ## Script supported targets: arm64-efi, x86_64-efi, , i386-efi
+    # TODO : Install 32bit brub2 then 64bit brub2 then `update-grub`
+    #        So's we can install 32 bit OS to live disk.
     #########################
     ##      64-BIT OS       #
     #########################
-#scope marker 
-# BITS
-    if [$BIT_SIZE = "64"]    
-# ARCH 1
+    if [$BIT_SIZE = "32"]    
         if [$ARCH == "ARM"]
             cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-# ERROR
+            grub-install --removable --target=arm-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
                 if [ "$?" = "0" ]; then
 	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
 	            else
 		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	            fi   
-# ARCH 2
-        else if [$ARCH == "ARM"]
+        else if [$ARCH == "X86"]
             cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-# ERROR
+            grub-install --removable --target=i386-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
                 if [ "$?" = "0" ]; then
 	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
 	            else
 		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	            fi
-# ARCH 4
-        else if [$ARCH == "ARM"]
+        # wait what?
+        else if [$ARCH == "X64"]
             cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-# ERROR
+            grub-install --removable --target=X86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
                 if [ "$?" = "0" ]; then
 	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
 	            else
 		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	            fi
-        else 
-            cecho "Something WIERD happened, Throw a banana and try again!"
-    #########################
-    ##      64-BIT OS       #
-    #########################
-# BITS
-    if [$BIT_SIZE = "64"]    
-# ARCH 1
-        if [$ARCH == "ARM"]
-            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-# ERROR
-                if [ "$?" = "0" ]; then
-	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
-	            else
-		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
-	            fi   
-# ARCH 2
-        else if [$ARCH == "ARM"]
-            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-# ERROR
-                if [ "$?" = "0" ]; then
-	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
-	            else
-		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
-	            fi
-# ARCH 4
-        else if [$ARCH == "ARM"]
-            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-# ERROR
-                if [ "$?" = "0" ]; then
-	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
-	            else
-		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
-	            fi
+            error_exit "[-]Mutually incompatible options,   " 1>&2 >> $LOGFILE
         else 
             cecho "Something WIERD happened, Throw a banana and try again!"
     
-    
+    # Copy the MBR for syslinux booting of LIVE disk
     dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of=/dev/sdX
-    syslinux --install /dev/sdX2
+    
+    # Install Syslinux
+    # https://wiki.syslinux.org/wiki/index.php?title=HowTos
+    syslinux --install /dev/${WANNABE_LIVE_DISK}2
     mv /tmp/usb-live/isolinux /tmp/usb-live/syslinux
     mv /tmp/usb-live/syslinux/isolinux.bin /tmp/usb-live/syslinux/syslinux.bin
     mv /tmp/usb-live/syslinux/isolinux.cfg /tmp/usb-live/syslinux/syslinux.cfg
+
+    # Magic, sets up syslinux configuration and layouts 
     sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
     sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 persistence/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
     sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 keyboard-layouts=en locales=en_US/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
     sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
+    
+    # Clean up!
     umount /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
     rmdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
 
