@@ -124,17 +124,16 @@ cecho ()
 	# Argument $1 = message
 	# Argument $2 = color
 	local default_msg="No message passed."
-	#message is first argument OR default
+    # Doesn't really need to be a local variable.
+	# Message is first argument OR default
 	message=${1:-$default_msg}
-	# color is second argument OR white
+	# olor is second argument OR white
 	color=${2:$white}
 	if [$color='lolz']
 	then
 		echo $message | lolcat
 		return
 	else
-		local default_msg="No message passed."
-		# Doesn't really need to be a local variable.
 		message=${1:-$default_msg}   # Defaults to default message.
 		color=${2:-$black}           # Defaults to black, if not specified.
 		echo -e "$color"
@@ -144,19 +143,19 @@ cecho ()
 }  
 
 echo "======================================================================="
-echo "=================--Debo0tstrap Chro0t Generat0r--======================"
+echo "=================" cecho "--Debo0tstrap Chro0t Generat0r--" blue "======================"
 echo "======================================================================="
 echo "==="
 LOGFILE='./debootstrap_log.txt'
-#HOST network interface configuration that connects to SANDBOX
-#in my test this is a Wireless-N Range extender with OpenWRT connected through a Ethernet to USB connector
+# HOST network interface configuration that connects to SANDBOX
+# In my test this is a Wireless-N Range extender with OpenWRT connected through a Ethernet to USB connector
 HOST_IFACE_NAME='enx000ec6527123'
 INT_IP='192.168.1.161'
-#HOST network interface configuration that connects to Command and Control 
-#This is the desktop workstation you aren't using this script on because its stupid to do that.
+# HOST network interface configuration that connects to Command and Control 
+# This is the desktop workstation you aren't using this script on because its stupid to do that.
 IF_CNC='eth0'
-IF_IP_CNC='192.168.0.44'_
-#internet access for the LAN, This is your internet router.
+IF_IP_CNC='192.168.0.44'
+# Internet access for the LAN, This is your internet router.
 GATEWAY='192.168.0.1'
 error_exit()
 {
@@ -184,7 +183,7 @@ deboot_first_stage()
 	sudo mount -o bind -t proc /proc $SANDBOX/proc
 	sudo mount -o bind -t sys /sys $SANDBOX/sys
 }
-#finish setting up the basic system
+# Finish setting up the basic system
 deboot_second_stage()
 {
 	sudo chroot $SANDBOX
