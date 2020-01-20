@@ -215,10 +215,10 @@ setup_disk()
 # You CAN boot .ISO Files from the persistance partition if you mount in GRUB2 
 
     ## EFI
-    parted /dev/$WANNABE_LIVE_DISK --script mkpart EFI fat16 1MiB 10MiB
+    parted /dev/$WANNABE_LIVE_DISK --script mkpart EFI fat16 1MiB 100MiB
 
     ## LIVE disk partition   
-    parted /dev/$WANNABE_LIVE_DISK --script mkpart live fat16 10MiB 3GiB
+    parted /dev/$WANNABE_LIVE_DISK --script mkpart live fat16 100MiB 3GiB
 
     ## Persistance Partition
     parted /dev/$WANNABE_LIVE_DISK --script mkpart persistence ext4 3GiB 100%  
@@ -283,7 +283,6 @@ setup_disk()
 	            else
 		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	            fi
-        # wait what?
         else if [$ARCH == "X64"]
             cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
             grub-install --removable --target=X86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
@@ -292,8 +291,7 @@ setup_disk()
 	            else
 		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	            fi
-            error_exit "[-]Mutually incompatible options,   " 1>&2 >> $LOGFILE
-        else 
+        else
             cecho "Something WIERD happened, Throw a banana and try again!"
     
     # Copy the MBR for syslinux booting of LIVE disk
