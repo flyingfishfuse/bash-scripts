@@ -100,15 +100,24 @@ help() {
 version() {
   help | head -1
 }
+# run the [ test command; if it succeeds, run the help command. $# is the number of arguments
 [ $# = 0 ] && help
+
+# While there are arguments to parse:
+# WHILE number of arguments passed to script is greater than 0 
+# for every argument passed to the script DO
 while [ $# -gt 0 ]; do
+
+# assign results of `grep | tr` to CMD
+# searches through THIS file :
 # grep -m 1, stop after first occurance
 # -Po, perl regex Print only the matched (non-empty) parts of a matching line, with each such part on a separate output line.
-# ^## match the following at beginning of string "##"
-# *$1
+# ^## *$1, MATCHES all the "##" until the END of the "-letter" shell expansion argument 
+# "|" MATCHES one OR the other
+#  --\K[^= ]* , MATCHES all the "--words" arguments
 
-#s/-/_/g substitutes all - for _; a more idiomatic way to do that would be to use tr instead of sed: tr - _.
-  CMD=$(grep -m 1 -Po "^## *$1, --\K[^= ]*|^##.* --\K${1#--}(?:[= ])" go.sh | sed -e "s/-/_/g")
+# tr - _ substitutes all - for _
+  CMD=$(grep -m 1 -Po "^## *$1, --\K[^= ]*|^##.* --\K${1#--}(?:[= ])" ${0} | tr - _)
   if [ -z "$CMD" ]; then echo "ERROR: Command '$1' not supported"; exit 1; fi
   shift; eval "$CMD" $@ || shift $? 2> /dev/null
 done
