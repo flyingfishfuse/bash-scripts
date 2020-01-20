@@ -1,14 +1,13 @@
 #!/bin/bash
 ## $PROG 1.0 - Print logs [2017-10-01] // Debo0tstrap Chro0t Generat0r v1 // 
 ## Compatible with bash and dash/POSIX
-##  This program makes a complete APT based distro in a folder and moves it to a disk
-##  Of your choosing OR it can make a network accessible sandbox for you to do whatever in.
-##  DO NOT WALK AWAY FROM THIS PROGRAM OR YOU WILL REGRET IT!
+##    This program makes a complete APT based distro in a folder and moves it to a disk
+##    Of your choosing OR it can make a network accessible sandbox for you to do whatever in.
+##    DO NOT WALK AWAY FROM THIS PROGRAM OR YOU WILL REGRET IT! A menu pops up and you have to 
+##    Decide what you want to do!
 ## CURRENTLY ONLY 64-BIT BOOTLOADER IS WORKING
 ## Usage: $PROG [OPTION...] [COMMAND]...
 ## Options:
-##   -i, --log-info           Set log level to info                             (Default)
-##   -q, --log-quiet          Set log level to quiet                            (not implemented yet)
 ##   -u, --user USER          The username to be created                        (Default: moop)
 ##   -p, --password PASS      The password to said username                     (Default: password)
 ##   -e, --extra LIST         Space seperated list of extra packages to install (Default: lolcat)
@@ -35,17 +34,8 @@
 ## The internet and search engines!
 ## 
 PROG=${0##*/}
-LOG=info
+LOGFILE="./{$0}.logfile"
 die() { echo $@ >&2; exit 2; }
-log_info() {
-  LOG=info
-}
-log_quiet() {
-  LOG=quiet
-}
-log() {
-  [ $LOG = info ] && echo "$1"; return 1 ## number of args used
-}
 #SANDBOX user configuration
 user()
 {
@@ -88,6 +78,18 @@ component()
 respositorie()
 {
 	REPOSITORY='http://archive.ubuntu.com/ubuntu/'
+}
+device()
+{
+    WANNABE_LIVE_DISK = ""
+}
+chroot_only()
+{
+
+}
+disk_only()
+{
+
 }
 #greps all "##" at the start of a line and displays it in the help text
 help() {
@@ -313,6 +315,11 @@ setup_disk()
     # Clean up!
     umount /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
     rmdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
+}
+
+# finish this you doo doo head
+verify_live_iso()
+{
 
 }
 
@@ -391,13 +398,15 @@ iptables -A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100
 ############################
 
 PS3="Choose your doom"
-select option in sandbox_connect setup_network quit
+select option in sandbox_connect setup_network create_disk quit
 do
 	case $option in
     	sandbox_connect) 
 			connect_sandbox
         setup_network) 
             establish_network
+        create_disk)
+            setup_disk
         quit)
         	break;;
     esac
