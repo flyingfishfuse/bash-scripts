@@ -102,6 +102,12 @@ version() {
 }
 [ $# = 0 ] && help
 while [ $# -gt 0 ]; do
+# grep -m 1, stop after first occurance
+# -Po, perl regex Print only the matched (non-empty) parts of a matching line, with each such part on a separate output line.
+# ^## match the following at beginning of string "##"
+# *$1
+
+#s/-/_/g substitutes all - for _; a more idiomatic way to do that would be to use tr instead of sed: tr - _.
   CMD=$(grep -m 1 -Po "^## *$1, --\K[^= ]*|^##.* --\K${1#--}(?:[= ])" go.sh | sed -e "s/-/_/g")
   if [ -z "$CMD" ]; then echo "ERROR: Command '$1' not supported"; exit 1; fi
   shift; eval "$CMD" $@ || shift $? 2> /dev/null
