@@ -19,6 +19,8 @@
 ##   -c, --compenent COMPO    Which repository components are included          (Default: main,contrib,universe,multiverse)
 ##   -r, --repositorie REPO   The Debian-based repository. E.g. "Ubuntu"        (Default: http://archive.ubuntu.com/ubuntu/)
 ##   -d, --device DEVICE      The device to install the Distro to               (Default: NONE THATS DANGEROUS!)
+##   - , --chroot_only        Only makes the SANDBOX
+##   - , --disk_only          Only makes the disk and filesystem structure
 ##
 ## Commands:
 ##   -h, --help             Displays this help and exists <-- no existential crisis here!
@@ -245,10 +247,30 @@ setup_disk()
     mount /dev/$WANNABE_LIVE_DISK /tmp/usb-efi
     mount /dev/$WANNABE_LIVE_DISK /tmp/usb-live
     mount /dev/$WANNABE_LIVE_DISK /tmp/usb-persistence
+    
+    # Mount the ISO on a temp folder to get the files moved
     mount -oro live.iso /tmp/live-iso
+    
     cp -ar /tmp/live-iso/* /tmp/usb-live
+    
+    # IMPORTANT! This establishes persistance! UNION is a special mounting option 
+    # https://unix.stackexchange.com/questions/282393/union-mount-on-linux
     echo "/ union" > /tmp/usb-persistence/persistence.conf
-    grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/sdX
+    
+    # Install GRUB2
+    if [$ARCH == "ARM"]
+        cecho "[+] Installing GRUB2 to /dev/${WANNABE_LIVE_DISK}" yellow
+        grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
+        if [ "$?" = "0" ]; then
+	        cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+	    else
+		    error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	fi   
+    else if [$ARCH == "X64"]
+        grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK    
+    else if [$ARCH == "X86"]
+        grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK
+    
     dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of=/dev/sdX
     syslinux --install /dev/sdX2
     mv /tmp/usb-live/isolinux /tmp/usb-live/syslinux
