@@ -157,7 +157,7 @@ IF_IP_CNC='192.168.0.44'_
 GATEWAY='192.168.0.1'
 error_exit()
 {
-	echo "$1" 1>&2 >> $LOGFILE
+	cecho "$1" red 1>&2 >> $LOGFILE
 	exit 1
 }
 deboot_first_stage()
@@ -256,20 +256,87 @@ setup_disk()
     # IMPORTANT! This establishes persistance! UNION is a special mounting option 
     # https://unix.stackexchange.com/questions/282393/union-mount-on-linux
     echo "/ union" > /tmp/usb-persistence/persistence.conf
-    
+
     # Install GRUB2
-    if [$ARCH == "ARM"]
-        cecho "[+] Installing GRUB2 to /dev/${WANNABE_LIVE_DISK}" yellow
-        grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-        if [ "$?" = "0" ]; then
-	        cecho "[+] GRUB2 Install Finished Successfully!" lolcat
-	    else
-		    error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
-	fi   
-    else if [$ARCH == "X64"]
-        grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK    
-    else if [$ARCH == "X86"]
-        grub-install --removable --target=x86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK
+    # https://en.wikipedia.org/wiki/GNU_GRUB
+    ## Script supported targets: arm-efi, arm64-efi, x86_64-efi, i386-pc, i386-efi
+    #
+    #########################
+    ##      64-BIT OS       #
+    #########################
+#scope marker 
+# BITS
+    if [$BIT_SIZE = "64"]    
+# ARCH 1
+        if [$ARCH == "ARM"]
+            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
+            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
+# ERROR
+                if [ "$?" = "0" ]; then
+	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+	            else
+		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	            fi   
+# ARCH 2
+        else if [$ARCH == "ARM"]
+            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
+            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
+# ERROR
+                if [ "$?" = "0" ]; then
+	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+	            else
+		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	            fi
+# ARCH 4
+        else if [$ARCH == "ARM"]
+            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
+            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
+# ERROR
+                if [ "$?" = "0" ]; then
+	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+	            else
+		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	            fi
+        else 
+            cecho "Something WIERD happened, Throw a banana and try again!"
+    #########################
+    ##      64-BIT OS       #
+    #########################
+# BITS
+    if [$BIT_SIZE = "64"]    
+# ARCH 1
+        if [$ARCH == "ARM"]
+            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
+            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
+# ERROR
+                if [ "$?" = "0" ]; then
+	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+	            else
+		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	            fi   
+# ARCH 2
+        else if [$ARCH == "ARM"]
+            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
+            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
+# ERROR
+                if [ "$?" = "0" ]; then
+	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+	            else
+		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	            fi
+# ARCH 4
+        else if [$ARCH == "ARM"]
+            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
+            grub-install --removable --target= --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
+# ERROR
+                if [ "$?" = "0" ]; then
+	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+	            else
+		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	            fi
+        else 
+            cecho "Something WIERD happened, Throw a banana and try again!"
+    
     
     dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of=/dev/sdX
     syslinux --install /dev/sdX2
