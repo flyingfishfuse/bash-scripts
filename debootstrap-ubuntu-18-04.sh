@@ -112,10 +112,14 @@ while [ $# -gt 0 ]; do
 # searches through THIS file :
 # grep -m 1, stop after first occurance
 # -Po, perl regex Print only the matched (non-empty) parts of a matching line, with each such part on a separate output line.
+
 # ^## *$1, MATCHES all the "##" until the END of the "-letter" shell expansion argument 
 # "|" MATCHES one OR the other
 #  --\K[^= ]* , MATCHES all the "--words" arguments
-
+    # The \K "resets the line position". Basically it means that with -o it will print the result
+    # from \K to the end that matched the regex. It's often used together grep -Po 'blabla\Kblabla'
+    # For example `echo abcde | grep -P 'ab\K..'` will print "de"
+    
 # tr - _ substitutes all - for _
   CMD=$(grep -m 1 -Po "^## *$1, --\K[^= ]*|^##.* --\K${1#--}(?:[= ])" ${0} | tr - _)
   if [ -z "$CMD" ]; then echo "ERROR: Command '$1' not supported"; exit 1; fi
