@@ -33,6 +33,7 @@
 ## That one person on stackexchange who answered everything in one post.
 ## The internet and search engines!
 ## 
+# https://stackoverflow.com/questions/14786984/best-way-to-parse-command-line-args-in-bash
 PROG=${0##*/}
 LOGFILE="./{$0}.logfile"
 die() { echo $@ >&2; exit 2; }
@@ -85,7 +86,7 @@ device()
 }
 sandbox_only()
 {
-
+    
 }
 filesystem_only()
 {
@@ -99,13 +100,12 @@ help() {
 version() {
   help | head -1
 }
-#Black magic wtf is this
 [ $# = 0 ] && help
 while [ $# -gt 0 ]; do
   CMD=$(grep -m 1 -Po "^## *$1, --\K[^= ]*|^##.* --\K${1#--}(?:[= ])" go.sh | sed -e "s/-/_/g")
   if [ -z "$CMD" ]; then echo "ERROR: Command '$1' not supported"; exit 1; fi
   shift; eval "$CMD" $@ || shift $? 2> /dev/null
-
+done
 #=========================================================
 #            Colorization stuff
 #=========================================================
