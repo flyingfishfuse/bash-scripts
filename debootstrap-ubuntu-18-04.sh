@@ -208,22 +208,43 @@ deboot_third_stage()
 # TOFOMOFO: check for disk space and throw a warning if needed 
 setup_disk()
 {
+# This creates the basic disk structure of an EFI disk with a single OS.
+# You CAN boot .ISO Files from the persistance partition if you mount in GRUB2 
 
-    parted /dev/sde --script mkpart EFI fat16 1MiB 10MiB
-    parted /dev/sde --script mkpart live fat16 10MiB 3GiB
-    parted /dev/sde --script mkpart persistence ext4 3GiB 100%  
-    parted /dev/sde --script set 1 msftdata on
-    parted /dev/sde --script set 2 legacy_boot on
-    parted /dev/sde --script set 2 msftdata on
+    ## EFI
+    parted /dev/$WANNABE_LIVE_DISK --script mkpart EFI fat16 1MiB 10MiB
 
-    mkfs.vfat -n EFI /dev/sdX1
-    mkfs.vfat -n LIVE /dev/sdX2
-    mkfs.ext4 -F -L persistence /dev/sde3
+    ## LIVE disk partition   
+    parted /dev/$WANNABE_LIVE_DISK --script mkpart live fat16 10MiB 3GiB
 
+    ## Persistance Partition
+    parted /dev/$WANNABE_LIVE_DISK --script mkpart persistence ext4 3GiB 100%  
+
+    ## Sets filesystem flag
+    parted /dev/$WANNABE_LIVE_DISK --script set 1 msftdata on
+
+    ## Sets boot flag for legacy (NON-EFI) BIOS
+    parted /dev/$WANNABE_LIVE_DISK --script set 2 legacy_boot on
+    parted /dev/$WANNABE_LIVE_DISK --script set 2 msftdata on
+
+# Here we make the filesystems for the OS to live on
+    
+    ## EFI
+    mkfs.vfat -n EFI /dev/{$WANNABE_LIVE_DISK}1
+    
+    ## LIVE disk partition
+    mkfs.vfat -n LIVE /dev/{$WANNABE_LIVE_DISK}2
+    
+    ## Persistance Partition
+    mkfs.ext4 -F -L persistence /dev/{$WANNABE_LIVE_DISK}3
+
+    # Creating Temporary work directories
     mkdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
-    mount /dev/sdf1 /tmp/usb-efi
-    mount /dev/sdf2 /tmp/usb-live
-    mount /dev/sdf3 /tmp/usb-persistence
+    
+    # Mounting those directories on the newly created filesystem
+    mount /dev/$WANNABE_LIVE_DISK /tmp/usb-efi
+    mount /dev/$WANNABE_LIVE_DISK /tmp/usb-live
+    mount /dev/$WANNABE_LIVE_DISK /tmp/usb-persistence
     mount -oro live.iso /tmp/live-iso
     cp -ar /tmp/live-iso/* /tmp/usb-live
     echo "/ union" > /tmp/usb-persistence/persistence.conf
