@@ -19,8 +19,8 @@
 ##   -c, --compenent COMPO    Which repository components are included          (Default: main,contrib,universe,multiverse)
 ##   -r, --repositorie REPO   The Debian-based repository. E.g. "Ubuntu"        (Default: http://archive.ubuntu.com/ubuntu/)
 ##   -d, --device DEVICE      The device to install the Distro to               (Default: NONE THATS DANGEROUS!)
-##   - , --chroot_only        Only makes the SANDBOX
-##   - , --disk_only          Only makes the disk and filesystem structure
+##   -s, --sandbox_only      Only makes the SANDBOX
+##   -f, --filesystem_only   Only makes the disk and filesystem structure
 ##
 ## Commands:
 ##   -h, --help             Displays this help and exists <-- no existential crisis here!
@@ -83,11 +83,11 @@ device()
 {
     WANNABE_LIVE_DISK = ""
 }
-chroot_only()
+sandbox_only()
 {
 
 }
-disk_only()
+filesystem_only()
 {
 
 }
