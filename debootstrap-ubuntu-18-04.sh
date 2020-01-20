@@ -35,7 +35,7 @@
 ## 
 # https://stackoverflow.com/questions/14786984/best-way-to-parse-command-line-args-in-bash
 PROG=${0##*/}
-LOGFILE="./{$0}.logfile"
+LOGFILE="$0.logfile"
 die() { echo $@ >&2; exit 2; }
 #SANDBOX user configuration
 user()
@@ -161,7 +161,6 @@ echo "======================================================================="
 echo "=================" cecho "--Debo0tstrap Chro0t Generat0r--" blue "======================"
 echo "======================================================================="
 echo "==="
-LOGFILE='./debootstrap_log.txt'
 # HOST network interface configuration that connects to SANDBOX
 # In my test this is a Wireless-N Range extender with OpenWRT connected through a Ethernet to USB connector
 HOST_IFACE_NAME='enx000ec6527123'
