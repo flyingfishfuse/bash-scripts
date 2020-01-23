@@ -1,26 +1,21 @@
 #!/bin/bash
 ## $PROG 1.0 - Print logs [2017-10-01] // Debo0tstrap Chro0t Generat0r v1 // 
 ## Compatible with bash and dash/POSIX
-##    This program makes a complete APT based distro in a folder and moves it to a disk
-##    Of your choosing OR it can make a network accessible sandbox for you to do whatever in.
-##    DO NOT WALK AWAY FROM THIS PROGRAM OR YOU WILL REGRET IT! A menu pops up and you have to 
-##    Decide what you want to do!
-## CURRENTLY ONLY 64-BIT BOOTLOADER IS WORKING
+## 
 ## Usage: $PROG [OPTION...] [COMMAND]...
 ## Options:
+##   -i, --log-info           Set log level to info                             (Default)
+##   -q, --log-quiet          Set log level to quiet                            (not implemented yet)
 ##   -u, --user USER          The username to be created                        (Default: moop)
 ##   -p, --password PASS      The password to said username                     (Default: password)
-##   -e, --extra LIST         Space seperated list of extra packages to install (Default: lolcat)
+##   -e, --extra LIST         Space seperated list of extra packages to install (Default: micro)
 ##   -m, --smacaddress MAC    MAC Address of the Sandbox                        (Default: de:ad:be:ef:ca:fe)
 ##   -i, --sipaddress IP      IP Address of the Sandbox                         (Default: 192.168.0.3)
 ##   -h, --sifacename IFACE   Interface name for the Sandbox                    (Default: hakc1)
 ##   -l, --sandbox_location   Full Path of the Sandbox                          (Default: /home/moop/Desktop/sandbox)
-##   -a, --architecture ARCH  AMD64, X86, ARM, what-have-you                    (Default: amd64)
-##   -c, --compenent COMPO    Which repository components are included          (Default: main,contrib,universe,multiverse)
-##   -r, --repositorie REPO   The Debian-based repository. E.g. "Ubuntu"        (Default: http://archive.ubuntu.com/ubuntu/)
-##   -d, --device DEVICE      The device to install the Distro to               (Default: NONE THATS DANGEROUS!)
-##   -s, --sandbox_only      Only makes the SANDBOX
-##   -f, --filesystem_only   Only makes the disk and filesystem structure
+##   -a, --architecture       AMD64, X86, ARM, what-have-you                    (Default: amd64)
+##   -c, --compenent          Which repository components are included          (Default: main,contrib,universe,multiverse)
+##   -r, --repositorie        The Debian-based repository. E.g. "Ubuntu"        (Default: http://archive.ubuntu.com/ubuntu/)
 ##
 ## Commands:
 ##   -h, --help             Displays this help and exists <-- no existential crisis here!
@@ -33,10 +28,18 @@
 ## That one person on stackexchange who answered everything in one post.
 ## The internet and search engines!
 ## 
-# https://stackoverflow.com/questions/14786984/best-way-to-parse-command-line-args-in-bash
 PROG=${0##*/}
-LOGFILE="$0.logfile"
+LOG=info
 die() { echo $@ >&2; exit 2; }
+log_info() {
+  LOG=info
+}
+log_quiet() {
+  LOG=quiet
+}
+log() {
+  [ $LOG = info ] && echo "$1"; return 1 ## number of args used
+}
 #SANDBOX user configuration
 user()
 {
@@ -49,7 +52,7 @@ password()
 extra()
 {
 	#Watch'ya watch'ya watch'ya want, watch'ya WANT?!?
-	EXTRA_PACKAGES='lolcat'
+	EXTRA_PACKAGES='micro'
 }
 sifacename()
 {
@@ -80,18 +83,6 @@ respositorie()
 {
 	REPOSITORY='http://archive.ubuntu.com/ubuntu/'
 }
-device()
-{
-    WANNABE_LIVE_DISK = ""
-}
-sandbox_only()
-{
-    
-}
-filesystem_only()
-{
-
-}
 #greps all "##" at the start of a line and displays it in the help text
 help() {
   grep "^##" "$0" | sed -e "s/^...//" -e "s/\$PROG/$PROG/g"; exit 0
@@ -100,31 +91,13 @@ help() {
 version() {
   help | head -1
 }
-# run the [ test command; if it succeeds, run the help command. $# is the number of arguments
+#Black magic wtf is this
 [ $# = 0 ] && help
-
-# While there are arguments to parse:
-# WHILE number of arguments passed to script is greater than 0 
-# for every argument passed to the script DO
 while [ $# -gt 0 ]; do
-
-# assign results of `grep | tr` to CMD
-# searches through THIS file :
-# grep -m 1, stop after first occurance
-# -Po, perl regex Print only the matched (non-empty) parts of a matching line, with each such part on a separate output line.
-
-# ^## *$1, MATCHES all the "##" until the END of the "-letter" shell expansion argument 
-# "|" MATCHES one OR the other
-#  --\K[^= ]* , MATCHES all the "--words" arguments
-    # The \K "resets the line position". Basically it means that with -o it will print the result
-    # from \K to the end that matched the regex. It's often used together grep -Po 'blabla\Kblabla'
-    # For example `echo abcde | grep -P 'ab\K..'` will print "de"
-    
-# tr - _ substitutes all - for _
-  CMD=$(grep -m 1 -Po "^## *$1, --\K[^= ]*|^##.* --\K${1#--}(?:[= ])" ${0} | tr - _)
+  CMD=$(grep -m 1 -Po "^## *$1, --\K[^= ]*|^##.* --\K${1#--}(?:[= ])" go.sh | sed -e "s/-/_/g")
   if [ -z "$CMD" ]; then echo "ERROR: Command '$1' not supported"; exit 1; fi
   shift; eval "$CMD" $@ || shift $? 2> /dev/null
-done
+
 #=========================================================
 #            Colorization stuff
 #=========================================================
@@ -136,23 +109,26 @@ blue='\E[34;47m'
 magenta='\E[35;47m'
 cyan='\E[36;47m'
 white='\E[37;47m'
-alias Reset="tput sgr0"      #  Reset text attributes to normal
-                             #+ without clearing screen.
+     
+#Reset text attributes to normal
+#without clearing screen.
+alias Reset="tput sgr0"
 cecho ()
 {
 	# Argument $1 = message
 	# Argument $2 = color
 	local default_msg="No message passed."
-    # Doesn't really need to be a local variable.
-	# Message is first argument OR default
+	#message is first argument OR default
 	message=${1:-$default_msg}
-	# olor is second argument OR white
+	# color is second argument OR white
 	color=${2:$white}
 	if [$color='lolz']
 	then
 		echo $message | lolcat
 		return
 	else
+		local default_msg="No message passed."
+		# Doesn't really need to be a local variable.
 		message=${1:-$default_msg}   # Defaults to default message.
 		color=${2:-$black}           # Defaults to black, if not specified.
 		echo -e "$color"
@@ -162,46 +138,81 @@ cecho ()
 }  
 
 echo "======================================================================="
-echo "=================" cecho "--Debo0tstrap Chro0t Generat0r--" blue "======================"
+echo "=================--Debo0tstrap Chro0t Generat0r--======================"
 echo "======================================================================="
 echo "==="
-# HOST network interface configuration that connects to SANDBOX
-# In my test this is a Wireless-N Range extender with OpenWRT connected through a Ethernet to USB connector
+LOGFILE='./debootstrap_log.txt'
+#HOST network interface configuration that connects to SANDBOX
+#in my test this is a Wireless-N Range extender with OpenWRT connected through a Ethernet to USB connector
 HOST_IFACE_NAME='enx000ec6527123'
 INT_IP='192.168.1.161'
-# HOST network interface configuration that connects to Command and Control 
-# This is the desktop workstation you aren't using this script on because its stupid to do that.
+#HOST network interface configuration that connects to Command and Control 
+#This is the desktop workstation you aren't using this script on because its stupid to do that.
 IF_CNC='eth0'
-IF_IP_CNC='192.168.0.44'
-# Internet access for the LAN, This is your internet router.
+IF_IP_CNC='192.168.0.44'_
+#internet access for the LAN, This is your internet router.
 GATEWAY='192.168.0.1'
 error_exit()
 {
-	cecho "$1" red 1>&2 >> $LOGFILE
+	echo "$1" 1>&2 >> $LOGFILE
 	exit 1
 }
 deboot_first_stage()
 {
-	echo "[+] Beginning Debootstrap" | lolcat
+# Sequential commands with error checking	
+	cecho "[+] Beginning Debootstrap" yellow
 	sudo debootstrap --components $COMPONENTS --arch $ARCH bionic $SANDBOX $REPOSITORY >> $LOGFILE
 	if [ "$?" = "0" ]; then
-	    cecho "[+] Debootstrap Finished Successfully!" lolcat
+	    cecho "[+] Debootstrap Finished Successfully!" green
 	else
 		error_exit "[-]Debootstrap Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	fi
-	echo "[+] Copying Resolv.conf" | lolcat
+
+#resolv.conf copy
+	echo "[+] Copying Resolv.conf" yellow
 	sudo cp /etc/resolv.conf $SANDBOX/etc/resolv.conf
 	if [ "$?" = "0" ]; then
-	    cecho "[+] Resolv.conf copied!" | lolcat 
+	    cecho "[+] Resolv.conf copied!" green 
 	else
 		error_exit "[-]Copy Failed! Check the logfile!" 1>&2 >> $LOGFILE
 	fi
+
+# sources.list copy
+    cecho "[+] Copying Sources.list" yellow
 	sudo cp /etc/apt/sources.list $SANDBOX/etc/apt/
+	if [ "$?" = "0" ]; then
+	    cecho "[+] Sources.list copied!" green 
+	else
+		error_exit "[-]Copy Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	fi
+
+#mount and bind the proper volumes
+# /dev
+	cecho "[+] Mounting /dev"  yellow
 	sudo mount -o bind /dev $SANDBOX/dev
+	if [ "$?" = "0" ]; then
+	    cecho "[+] Mounted!" green 
+	else
+		error_exit "[-]Mount Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	fi
+# /proc
+    cecho "[+] Mounting /proc" yellow
 	sudo mount -o bind -t proc /proc $SANDBOX/proc
+	if [ "$?" = "0" ]; then
+	    cecho "[+] Mounted!" green 
+	else
+		error_exit "[-]Mount Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	fi
+# /sys
+    cecho "[+] Mounting /dev" yellow
 	sudo mount -o bind -t sys /sys $SANDBOX/sys
+	if [ "$?" = "0" ]; then
+	    cecho "[+] Mounted!" green 
+	else
+		error_exit "[-]Mount Failed! Check the logfile!" 1>&2 >> $LOGFILE
+	fi
 }
-# Finish setting up the basic system
+#finish setting up the basic system
 deboot_second_stage()
 {
 	sudo chroot $SANDBOX
@@ -215,131 +226,11 @@ deboot_second_stage()
 	#sudo -S locale-gen en_US.UTF-8  # or your preferred locale
 	#tzselect; TZ='Continent/Country'; export TZ  #Configure and use our local time instead of UTC; save in .profile
 }
-
-# begin setting up services
-# TOFU: make a list of conf files needing to be changed 
-# and have them ready to be opened one by one
-# OR have them applied from a formatted file
+#begin setting up services
 deboot_third_stage()
 {
-
 	sudo -S apt install $EXTRA_PACKAGES
-
 }
-
-# TOFOMOFO: check for disk space and throw a warning if needed 
-setup_disk()
-{
-# This creates the basic disk structure of an EFI disk with a single OS.
-# You CAN boot .ISO Files from the persistance partition if you mount in GRUB2 
-
-    ## EFI
-    parted /dev/$WANNABE_LIVE_DISK --script mkpart EFI fat16 1MiB 100MiB
-
-    ## LIVE disk partition   
-    parted /dev/$WANNABE_LIVE_DISK --script mkpart live fat16 100MiB 3GiB
-
-    ## Persistance Partition
-    parted /dev/$WANNABE_LIVE_DISK --script mkpart persistence ext4 3GiB 100%  
-
-    ## Sets filesystem flag
-    parted /dev/$WANNABE_LIVE_DISK --script set 1 msftdata on
-
-    ## Sets boot flag for legacy (NON-EFI) BIOS
-    parted /dev/$WANNABE_LIVE_DISK --script set 2 legacy_boot on
-    parted /dev/$WANNABE_LIVE_DISK --script set 2 msftdata on
-
-# Here we make the filesystems for the OS to live on
-    
-    ## EFI
-    mkfs.vfat -n EFI /dev/{$WANNABE_LIVE_DISK}1
-    
-    ## LIVE disk partition
-    mkfs.vfat -n LIVE /dev/{$WANNABE_LIVE_DISK}2
-    
-    ## Persistance Partition
-    mkfs.ext4 -F -L persistence /dev/{$WANNABE_LIVE_DISK}3
-
-    # Creating Temporary work directories
-    mkdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
-    
-    # Mounting those directories on the newly created filesystem
-    mount /dev/$WANNABE_LIVE_DISK /tmp/usb-efi
-    mount /dev/$WANNABE_LIVE_DISK /tmp/usb-live
-    mount /dev/$WANNABE_LIVE_DISK /tmp/usb-persistence
-    
-    # Mount the ISO on a temp folder to get the files moved
-    mount -oro live.iso /tmp/live-iso
-    
-    cp -ar /tmp/live-iso/* /tmp/usb-live
-    
-    # IMPORTANT! This establishes persistance! UNION is a special mounting option 
-    # https://unix.stackexchange.com/questions/282393/union-mount-on-linux
-    echo "/ union" > /tmp/usb-persistence/persistence.conf
-
-    # Install GRUB2
-    # https://en.wikipedia.org/wiki/GNU_GRUB
-    ## Script supported targets: arm64-efi, x86_64-efi, , i386-efi
-    # TODO : Install 32bit brub2 then 64bit brub2 then `update-grub`
-    #        So's we can install 32 bit OS to live disk.
-    #########################
-    ##      64-BIT OS       #
-    #########################
-    if [$BIT_SIZE = "32"]    
-        if [$ARCH == "ARM"]
-            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target=arm-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-                if [ "$?" = "0" ]; then
-	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
-	            else
-		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
-	            fi   
-        else if [$ARCH == "X86"]
-            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target=i386-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-                if [ "$?" = "0" ]; then
-	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
-	            else
-		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
-	            fi
-        else if [$ARCH == "X64"]
-            cecho "[+] Installing GRUB2 for ${ARCH} to /dev/${WANNABE_LIVE_DISK}" yellow
-            grub-install --removable --target=X86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi /dev/$WANNABE_LIVE_DISK 
-                if [ "$?" = "0" ]; then
-	                cecho "[+] GRUB2 Install Finished Successfully!" lolcat
-	            else
-		            error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> $LOGFILE
-	            fi
-        else
-            cecho "Something WIERD happened, Throw a banana and try again!"
-    
-    # Copy the MBR for syslinux booting of LIVE disk
-    dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of=/dev/sdX
-    
-    # Install Syslinux
-    # https://wiki.syslinux.org/wiki/index.php?title=HowTos
-    syslinux --install /dev/${WANNABE_LIVE_DISK}2
-    mv /tmp/usb-live/isolinux /tmp/usb-live/syslinux
-    mv /tmp/usb-live/syslinux/isolinux.bin /tmp/usb-live/syslinux/syslinux.bin
-    mv /tmp/usb-live/syslinux/isolinux.cfg /tmp/usb-live/syslinux/syslinux.cfg
-
-    # Magic, sets up syslinux configuration and layouts 
-    sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
-    sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 persistence/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
-    sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 keyboard-layouts=en locales=en_US/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
-    sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
-    
-    # Clean up!
-    umount /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
-    rmdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
-}
-
-# finish this you doo doo head
-verify_live_iso()
-{
-
-}
-
 #Makes an interface with iproute1
 create_iface_ipr1()
 {
@@ -414,16 +305,14 @@ iptables -A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100
 ##--	Menu System		--##
 ############################
 
-PS3="Choose your doom"
-select option in sandbox_connect setup_network create_disk quit
+PS3="Choose your doom:>"
+select option in sandbox_connect setup_network quit
 do
 	case $option in
     	sandbox_connect) 
 			connect_sandbox
         setup_network) 
             establish_network
-        create_disk)
-            setup_disk
         quit)
         	break;;
     esac
