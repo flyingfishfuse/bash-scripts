@@ -388,8 +388,7 @@ setup_host_networking(){
 }
 #this is a seperate "computer", The following is in case you want to setup another
 #virtual computer inside this one and allow to the outside
-sandbox_forwarding()
-{
+sandbox_forwarding(){
 	#Allow forwarding on Sandbox IFACE
 	#sysctl -w net.ipv4.conf.$SANDBOX_IFACE_NAME.forwarding=1
 	#Allow forwarding on Host IFACE
@@ -399,8 +398,7 @@ sandbox_forwarding()
 	#iptables -A FORWARD -i $HOST_IFACE_NAME -o $SANDBOX_IFACE_NAME -j ACCEPT
 }
 #run this from the Host
-establish_network()
-{
+establish_network(){
 	# 1. Delete all existing rules
 	iptables -F
 	# 2. Set default chain policies
@@ -411,17 +409,13 @@ establish_network()
 	iptables -A INPUT -i eth0 -p tcp --dport 22 -m state --state NEW,ESTABLISHED -j ACCEPT
 	iptables -A OUTPUT -o eth0 -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
 	# Allow incoming HTTPS
-	iptables -A INPUT -i eth0 -p tcp --dport 443 -m state --state NEW,ESTABLISHED -j ACCEPT
-	iptables -A OUTPUT -o eth0 -p tcp --sport 443 -m state --state ESTABLISHED -j ACCEPT
+	iptables -A INPUT -i eth0 -p tcp --dport 443 -m state --state NEW,ESTABLISHED -j ACCEPT;
+	iptables -A OUTPUT -o eth0 -p tcp --sport 443 -m state --state ESTABLISHED -j ACCEPT;
 	# 19. Allow MySQL connection only from a specific network
-#iptables -A INPUT -i eth0 -p tcp -s 192.168.200.0/24 --dport 3306 -m state --state NEW,ESTABLISHED -j ACCEPT
-#iptables -A OUTPUT -o eth0 -p tcp --sport 3306 -m state --state ESTABLISHED -j ACCEPT
-# 23. Prevent DoS attack
-iptables -A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT
-
-
-
-
+	#iptables -A INPUT -i eth0 -p tcp -s 192.168.200.0/24 --dport 3306 -m state --state NEW,ESTABLISHED -j ACCEPT
+	#iptables -A OUTPUT -o eth0 -p tcp --sport 3306 -m state --state ESTABLISHED -j ACCEPT
+	# 23. Prevent DoS attack;
+	iptables -A INPUT -p tcp --dport 80 -m limit --limit 25/minute --limit-burst 100 -j ACCEPT
 }
 ############################
 ##--	Menu System		--##
