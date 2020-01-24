@@ -1,6 +1,5 @@
 #!/bin/bash
-## $PROG 1.0 - Print logs [2017-10-01] // Debo0tstrap Chro0t Generat0r v1 // 
-## Compatible with bash and dash/POSIX
+## $PROG Debo0tstrap Chro0t Generat0r v1 
 ##    This program makes a complete APT based distro in a folder and moves it to a disk
 ##    Of your choosing OR it can make a network accessible sandbox for you to do whatever in.
 ##    DO NOT WALK AWAY FROM THIS PROGRAM OR YOU WILL REGRET IT! A menu pops up and you have to 
