@@ -30,6 +30,9 @@ cat <<EOF
  how-can-i-pass-a-command-line-argument-into-a-shell-script
  https://unix.stackexchange.com/questions/31414/
 
+ using-getopts-to-process-long-and-short-command-line-options
+ https://stackoverflow.com/questions/402377/
+
  uefi-bios-bootable-live-debian-stretch-amd64-with-persistence
  https://unix.stackexchange.com/questions/382817/
 
@@ -39,15 +42,20 @@ read -r -d '' empty_required_args_error_message<<'EOF'
 ###############################################################################
 [-]
 [-] ERROR: Some or all of the required parameters are empty.
-[-] You must provide the following:
+[-]        You must provide the following:
 [-]
 [-]     Desired processor architecture for the bootloader
+[-]
 [-]         example: amd64
 [-]
-[-]     Full system path to a debian live iso
+[-]     Full system path to a debian live iso, if you dont have one, you can 
+[-]     run this program using the -g or --get_iso option to download one from
+[-]     the official debian mirrors
+[-]     
 [-]         example: /home/user/Downloads/debian.iso
 [-]
 [-]     Device path of unpartitioned device
+[-] 
 [-]         example: /dev/sdb
 [-]
 ###############################################################################
@@ -58,7 +66,7 @@ EOF
 
 PROG=${0##*/}
 LOGFILE="$0.logfile"
-die() { echo $@ >&2; exit 2; }
+#die() { echo $@ >&2; exit 2; }
 
 
 green="$(tput setaf 2)"
@@ -87,28 +95,14 @@ echo "$1" red 1>&2 >> "$LOGFILE"
 exit 1
 }
 
-architecture()
-{
-    if $1; then
-        architecture=$1
-    else
-        echo "[-] architecture not supplied as argument, cannot proceed"
-    fi
-}
-source_live_iso="/home/$USER/Downloads/debian.iso"
-
-# param1 : device id in the form of /dev/sda without the /dev/
-set_target_device()
-{
-device="$1"
-echo " Device chosen is /dev/$device"
-}
-
 # downloads a new iso for packing
 get_new_iso()
 {
-wget -O "/home/$USER/Downloads/debian.iso" \
-https://cdimage.debian.org/images/unofficial/non-free/images-including-firmware/11.6.0-live+nonfree/amd64/iso-hybrid/debian-live-11.6.0-amd64-cinnamon+nonfree.iso
+cecho "[+] Downloading new Debian ISO" "$green"
+wget -O "/home/$USER/Downloads/debian.iso" https://cdimage.debian.org/images/unofficial/non-free/images-including-firmware/11.6.0-live+nonfree/amd64/iso-hybrid/debian-live-11.6.0-amd64-cinnamon+nonfree.iso
+cecho "[+] Debian ISO has been downloaded to the following location: \n[+] /home/$USER/Downloads/debian.iso" "$green"
+cecho "[+] Run this program again with the operational arguments to perform the creation of a live usb" "$green"
+exit
 }
 
 #set_source_live_iso()
@@ -255,7 +249,7 @@ else
 fi
 }
 
-create_LIVE_VFAT_file_systems()
+create_EFI_VFAT_file_systems()
 {
 # Here we make the filesystems for the OS to live on
 # EFI
@@ -266,8 +260,9 @@ else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
 fi
 }
+
 # LIVE disk partition
-create_LIVE_filesystem()
+create_LIVE_VFAT_filesystem()
 {
 cecho "[+] creating vfat on LIVE partition" "$green"
 if mkfs.vfat -n LIVE "/dev/$device"2 &>> "$LOGFILE"; then
@@ -276,6 +271,7 @@ else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
 fi
 }
+
 create_persistant_filesystem()
 {
 # Persistance Partition
@@ -373,6 +369,7 @@ fi
 #########################
 ##| 64-BIT OS   #
 #########################
+
 install_grub_to_image()
 {
 # if using ARM devices
@@ -425,7 +422,7 @@ mv /tmp/usb-live/syslinux/isolinux.bin /tmp/usb-live/syslinux/syslinux.bin
 mv /tmp/usb-live/syslinux/isolinux.cfg /tmp/usb-live/syslinux/syslinux.cfg
 }
 
-# Magic, sets up syslinux configuration and layouts 
+# Magic, sets up syslinux configuration and layouts
 setup_boot_config()
 {
 sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
@@ -447,9 +444,8 @@ do
       a ) architecture="$OPTARG" ;;
       l ) live_iso_path="$OPTARG" ;;
       d ) device="$OPTARG" ;;
-      g ) get_iso ;; # ="$OPTARG" ;;
+      g ) get_iso && exit;; # ="$OPTARG" ;;
       h ) show_help ;;
-      v ) print_version_information ;;
       ? ) show_help ;; # Print helpFunction in case parameter is non-existent
    esac
 done
@@ -460,10 +456,30 @@ done
 if [ -z "$architecture" ] || [ -z "$live_iso_path" ] || [ -z "$device" ]
 then
    echo "$empty_required_args_error_message"
-   #show_help
-fi
-
-if get_iso
-then
-    cecho "[+] Downloading new Debian ISO"
+else
+    # creates temporary work directories
+    set_temp_dirs
+    # creates efi partition
+    setup_EFI
+    # creates live os partition
+    setup_LIVE
+    # creates persistant data partition
+    setup_persistance
+    # sets required flags on all partitions
+    set_flags
+    create_EFI_VFAT_file_systems
+    create_LIVE_VFAT_filesystem
+    create_persistant_filesystem
+    create_temp_work_dirs
+    mount_EFI
+    mount_LIVE
+    mount_PERSIST
+    mount_ISO
+    copy_ISO_to_tmp
+    enable_persistance
+    install_grub_to_image
+    copy_syslinux_to_MBR
+    install_syslinux
+    setup_boot_config
+    clean
 fi
