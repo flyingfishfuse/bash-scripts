@@ -164,40 +164,38 @@ fi
 
 }
 
+# creates /dev/xx1 EFI boot partition
+# This creates the basic disk structure of an EFI disk with a single OS.
 setup_EFI()
 {
-# This creates the basic disk structure of an EFI disk with a single OS.
-# You CAN boot .ISO Files from the persistance partition if you mount in GRUB2
 
-# EFI
-# creates /dev/xx1
 # check for flag before attempting operation
 cecho "[+] checking if EFI partition has already been created" "$green"
     #if partprobe -d -s /dev/sdb1 print | grep "msftdata"; then
-if sudo partprobe -d -s /dev/sdb print ; then
-    if sudo partprobe -d -s "$device"1; then
-        cecho "[+] Found /dev/{$device}1, skipping operation" "$green"
+if sudo partprobe -d -s "$device"1; then
+    cecho "[+] Found ${device}1, skipping operation" "$green"
+else
+    cecho "[+] creating EFI partition" "$green"
+    if sudo parted "$device" --script mkpart EFI fat16 1MiB 100MiB &>> "$LOGFILE"; then
+        cecho "[+] EFI partition created" "$green"
     else
-        cecho "[+] creating EFI partition" "$green"
-        if sudo parted "$device" --script mkpart EFI fat16 1MiB 100MiB &>> "$LOGFILE"; then
-            cecho "[+] EFI partition created" "$green"
-        else
-            cecho "[+] Could not create EFI partition, check the logfile" "$red"
-            exit
-        fi
+        cecho "[+] Could not create EFI partition, check the logfile" "$red"
+        exit
     fi
 fi
 }
+
+# creates /dev/xxx2 LIVE disk partition
+# you can chroot into the filesystem created by the usage of unsquashfs
+# to modify the OS
 setup_LIVE()
 {
-# LIVE disk partition   
-# creates /dev/xx2
 cecho "[+]  checking if LIVE partition has already been created" "$green"
-if partprobe -d -s "$device"2; then
-    cecho "[+] Found /dev/{$device}2, skipping operation" "$green"
+if sudo partprobe -d -s "$device"2; then
+    cecho "[+] Found ${device}2, skipping operation" "$green"
 else
     if parted "$device" --script mkpart live fat16 100MiB 3GiB &>> "$LOGFILE"; then
-    cecho "[+] LIVE partition created " "$green"
+    cecho "[+] LIVE partition created on $device " "$green"
     else
         cecho "[+] Could not create live partition, check the logfile" "$red"
         exit
@@ -205,13 +203,13 @@ else
 fi
 }
 
-# Persistance Partition
-# creates /dev/xx3
+# creates /dev/xxx3 Persistance Partition
+# You CAN boot .ISO Files from the persistance partition if you mount in GRUB2
 setup_persistance()
 {
 cecho "[+]  checking if PERSISTANCE partition has already been created" "$green"
 if partprobe -d -s "$device"3; then
-    cecho "[+] Found /dev/{$device}3, skipping operation" "$green"
+    cecho "[+] Found ${device}3, skipping operation" "$green"
 else
     if parted "$device" --script mkpart persistence ext4 3GiB 100% &>> "$LOGFILE" ; then
         cecho "[+] Persistance partition created " "$green"
@@ -254,7 +252,7 @@ create_EFI_VFAT_file_systems()
 # Here we make the filesystems for the OS to live on
 # EFI
 cecho "[+] creating vfat on EFI partition" "$green"
-if mkfs.vfat -n EFI "/dev/$device"1 &>> "$LOGFILE"; then
+if mkfs.vfat -n EFI "${device}"1 &>> "$LOGFILE"; then
     cecho "[+] vfat filesystem created on EFI partition" "$green"
 else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
@@ -265,7 +263,7 @@ fi
 create_LIVE_VFAT_filesystem()
 {
 cecho "[+] creating vfat on LIVE partition" "$green"
-if mkfs.vfat -n LIVE "/dev/$device"2 &>> "$LOGFILE"; then
+if mkfs.vfat -n LIVE "${device}"2 &>> "$LOGFILE"; then
     cecho "[+] vfat filesystem created on LIVE partition" "$green"
 else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
@@ -276,7 +274,7 @@ create_persistant_filesystem()
 {
 # Persistance Partition
 cecho "[+] creating ext4 on persistance partition" "$green"
-if mkfs.ext4 -F -L persistence "/dev/$device"3 &>> "$LOGFILE"; then
+if mkfs.ext4 -F -L persistence "${device}"3 &>> "$LOGFILE"; then
     cecho "[+] Ext4 filesystem created on persistance partition" "$green"
 else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
@@ -375,7 +373,7 @@ install_grub_to_image()
 # if using ARM devices
 if [ "$architecture" == "ARM" ]; then
     cecho "[+] Installing GRUB2 for ${architecture} to /dev/${device}" "$yellow"
-    grub-install --removable --target=arm-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "/dev/$device"
+    grub-install --removable --target=arm-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "${device}"
     if [ "$?" = "0" ]; then
         cecho "[+] GRUB2 Install Finished Successfully!" $green
     else
@@ -386,7 +384,7 @@ fi
 # if using x86
 if [ "$architecture" == "X86" ]; then
     cecho "[+] Installing GRUB2 for ${architecture} to /dev/${device}" $yellow
-    grub-install --removable --target=i386-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "/dev/$device"
+    grub-install --removable --target=i386-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "${device}"
     if [ "$?" = "0" ]; then
         cecho "[+] GRUB2 Install Finished Successfully!" $green
     else
@@ -394,11 +392,10 @@ if [ "$architecture" == "X86" ]; then
     fi
 fi
 
-if [ "$architecture" == "X64" ]; then
+if [ "$architecture" == "x64" ]; then
     cecho "[+] Installing GRUB2 for ${architecture} to /dev/${device}" $yellow
-    grub-install --removable --target=X86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "/dev/$device"
-    if [ "$?" = "0" ]; then
-        cecho "[+] GRUB2 Install Finished Successfully!" lolcat
+    if grub-install --removable --target=X86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "${device}"; then
+        cecho "[+] GRUB2 Install Finished Successfully!" "$green"
     else
         error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> "$LOGFILE"
     fi
@@ -409,14 +406,14 @@ fi
 # this is to the device itself, not any specific partition
 copy_syslinux_to_MBR()
 {
-dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of="/dev/$device"
+dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of="${device}"
 }
 
 # Install Syslinux
 # https://wiki.syslinux.org/wiki/index.php?title=HowTos
 install_syslinux()
 {
-echo "/dev/$device"2 | syslinux --install
+echo "${device}"2 | syslinux --install
 mv /tmp/usb-live/isolinux /tmp/usb-live/syslinux
 mv /tmp/usb-live/syslinux/isolinux.bin /tmp/usb-live/syslinux/syslinux.bin
 mv /tmp/usb-live/syslinux/isolinux.cfg /tmp/usb-live/syslinux/syslinux.cfg
