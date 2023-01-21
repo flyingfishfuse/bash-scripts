@@ -1,5 +1,9 @@
 #!/bin/bash
 
+PROG=${0##*/}
+LOGFILE="$0.logfile"
+#die() { echo $@ >&2; exit 2; }
+
 show_help(){
 cat <<EOF 
  $PROG Live_USB_creator.sh 
@@ -9,7 +13,7 @@ cat <<EOF
  Options:
   -a, --architecture ARCH   AMD64, X86, ARM,                           ( Required, Default: amd64 )
 
-  -l, --live_iso ISO_PATH   full system path to live iso file
+  -l, --iso_path ISO_PATH   full system path to live iso file
                             e.g. (/home/USER/Downloads/debian.iso)     ( Required, Default: NONE )
 
   -d, --device DEVICE       The device to install the Distro to        ( Required, Default: NONE )
@@ -64,11 +68,6 @@ EOF
 #-v, --version  Displays output version and exits
 #print_version_information(){}
 
-PROG=${0##*/}
-LOGFILE="$0.logfile"
-#die() { echo $@ >&2; exit 2; }
-
-
 green="$(tput setaf 2)"
 red=$(tput setaf 1)
 yellow=$(tput setaf 3)
@@ -115,58 +114,15 @@ exit
 #temp_live_iso_dir="/tmp/live-iso"
 set_temp_dirs()
 {
-temp_efi_dir=/tmp/usb-efi
-temp_live_dir=/tmp/usb-live
-temp_persist_dir=/tmp/usb-persistence
-temp_live_iso_dir=/tmp/live-iso
-}
-#--------------------------------------
-# Checks if partition has been mounted
-# or created
-# param1: device (/dev/sdxx)
-check_partitions()
-{
-#   -d, --dry-run    do not actually inform the operating system
-#   -s, --summary    print a summary of contents
-
-#On a disk with no partition table:
-# partprobe -d -s /dev/sdb
-#(no output)
-
-#On a disk with a partition table but no partitions:
-# partprobe -d -s /dev/sdb
-#/dev/sdb: msdos partitions
-
-#On a disk with a partition table and one partition:
-# partprobe -d -s /dev/sdb
-#/dev/sdb: msdos partitions 1
-
-#On a disk with a partition table and multiple partitions:
-# partprobe -d -s /dev/sda
-#/dev/sda: msdos partitions 1 2 3 4 <5 6 7>
-
-if partprobe -d -s "$1"; then
-    #moop@devbox:~$ sudo partprobe -d -s /dev/sda ; echo $?
-    #/dev/sda: msdos partitions 1 2
-    #0
-    cecho "[+] Found $1, skipping operation" "$green"
-    return 0
-else
-    #moop@devbox:~$ sudo partprobe -d -s /dev/sda3 ; echo $?
-    #Error: Could not stat device /dev/sda3 - No such file or directory.
-    #1
-    cecho "[-] " "$red"
-    return 0
-fi
-#if grep -qs '/dev/sdc' /proc/mounts; then
-#    cecho "[+] $1 " "$yellow"
-#fi
-
+temp_efi_dir="/tmp/usb-efi"
+temp_live_dir="/tmp/usb-live"
+temp_persist_dir="/tmp/usb-persistence"
+temp_live_iso_dir="/tmp/live-iso"
 }
 
 # creates /dev/xx1 EFI boot partition
 # This creates the basic disk structure of an EFI disk with a single OS.
-setup_EFI()
+create_EFI()
 {
 
 # check for flag before attempting operation
@@ -188,13 +144,13 @@ fi
 # creates /dev/xxx2 LIVE disk partition
 # you can chroot into the filesystem created by the usage of unsquashfs
 # to modify the OS
-setup_LIVE()
+create_LIVE()
 {
 cecho "[+]  checking if LIVE partition has already been created" "$green"
 if sudo partprobe -d -s "$device"2; then
     cecho "[+] Found ${device}2, skipping operation" "$green"
 else
-    if parted "$device" --script mkpart live fat16 100MiB 3GiB &>> "$LOGFILE"; then
+    if sudo parted "$device" --script mkpart live fat16 100MiB 3GiB &>> "$LOGFILE"; then
     cecho "[+] LIVE partition created on $device " "$green"
     else
         cecho "[+] Could not create live partition, check the logfile" "$red"
@@ -205,13 +161,13 @@ fi
 
 # creates /dev/xxx3 Persistance Partition
 # You CAN boot .ISO Files from the persistance partition if you mount in GRUB2
-setup_persistance()
+create_PERSISTANT()
 {
 cecho "[+]  checking if PERSISTANCE partition has already been created" "$green"
-if partprobe -d -s "$device"3; then
+if sudo partprobe -d -s "$device"3; then
     cecho "[+] Found ${device}3, skipping operation" "$green"
 else
-    if parted "$device" --script mkpart persistence ext4 3GiB 100% &>> "$LOGFILE" ; then
+    if sudo parted "$device" --script mkpart persistence ext4 3GiB 100% &>> "$LOGFILE" ; then
         cecho "[+] Persistance partition created " "$green"
     else
         cecho "[+] Could not create Persistance partition, check the logfile" "$red"
@@ -223,7 +179,7 @@ set_flags()
 {
 # Sets filesystem flag
 cecho "[+] setting msftdata flag" "$green"
-if parted "$device" --script set 1 msftdata on &>> "$LOGFILE"; then
+if sudo parted "$device" --script set 1 msftdata on &>> "$LOGFILE"; then
     cecho "[+] Flag set" "$green"
 else
     cecho "[+] Error setting flag, check the logfile" "$red"
@@ -232,7 +188,7 @@ fi
 
 # Sets boot flag for legacy (NON-EFI) BIOS
 cecho "[+] Setting boot flag for legacy (NON-EFI) BIOS" "$green"
-if parted "$device" --script set 2 legacy_boot on &>> "$LOGFILE"; then
+if sudo parted "$device" --script set 2 legacy_boot on &>> "$LOGFILE"; then
     cecho "[+] boot flag set" "$green"
 else
     cecho "[+] Error setting flag, check the logfile" "$red"
@@ -240,7 +196,7 @@ fi
 
 # Sets msftdata flag
 cecho "[+] Setting msftdata flag" "$green"
-if parted "$device" --script set 2 msftdata on &>> "$LOGFILE"; then
+if sudo parted "$device" --script set 2 msftdata on &>> "$LOGFILE"; then
     cecho "[+] Flag Set" "$green"
 else
     cecho "[+] Error setting flag, check the logfile" "$red"
@@ -252,7 +208,7 @@ create_EFI_VFAT_file_systems()
 # Here we make the filesystems for the OS to live on
 # EFI
 cecho "[+] creating vfat on EFI partition" "$green"
-if mkfs.vfat -n EFI "${device}"1 &>> "$LOGFILE"; then
+if sudo mkfs.vfat -n EFI "${device}"1 &>> "$LOGFILE"; then
     cecho "[+] vfat filesystem created on EFI partition" "$green"
 else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
@@ -263,7 +219,7 @@ fi
 create_LIVE_VFAT_filesystem()
 {
 cecho "[+] creating vfat on LIVE partition" "$green"
-if mkfs.vfat -n LIVE "${device}"2 &>> "$LOGFILE"; then
+if sudo mkfs.vfat -n LIVE "${device}"2 &>> "$LOGFILE"; then
     cecho "[+] vfat filesystem created on LIVE partition" "$green"
 else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
@@ -274,7 +230,7 @@ create_persistant_filesystem()
 {
 # Persistance Partition
 cecho "[+] creating ext4 on persistance partition" "$green"
-if mkfs.ext4 -F -L persistence "${device}"3 &>> "$LOGFILE"; then
+if sudo mkfs.ext4 -F -L persistence "${device}"3 &>> "$LOGFILE"; then
     cecho "[+] Ext4 filesystem created on persistance partition" "$green"
 else
     cecho "[+] Error creating filesystem, check the logfile" "$red"
@@ -285,7 +241,7 @@ fi
 create_temp_work_dirs()
 {
 cecho "[+] creating temporary work directories " "$green"
-if mkdir $temp_efi_dir $temp_live_dir $temp_persist_dir $temp_live_iso_dir &>> "$LOGFILE"; then
+if sudo mkdir $temp_efi_dir $temp_live_dir $temp_persist_dir $temp_live_iso_dir &>> "$LOGFILE"; then
     cecho "[+] Temporary work directories created" "$green"
 else
     cecho "[+] ERROR: Failed to create temporary work directories, check the logfile" "$red"
@@ -297,7 +253,7 @@ fi
 mount_EFI()
 {
 cecho "[+] mounting EFI partition on temporary work directory" "$green"
-if mount "$device"1 /tmp/usb-efi &>> "$LOGFILE";then
+if sudo mount "$device"1 $temp_efi_dir &>> "$LOGFILE";then
     cecho "[+] partition mounted" "$green"
 else
     cecho "[+]  ERROR: Failed to mount partition, check the logfile" "$red"
@@ -308,7 +264,7 @@ fi
 mount_LIVE()
 {
 cecho "[+] mounting LIVE partition on temporary work directory" "$green"
-if mount "$device"2 /tmp/usb-live &>> "$LOGFILE"; then
+if sudo mount "$device"2 $temp_live_dir &>> "$LOGFILE"; then
     cecho "[+] partition mounted" "$green"
 else
     cecho "[+] ERROR: Failed to mount partition , check the logfile" "$red"
@@ -319,7 +275,7 @@ fi
 mount_PERSIST()
 {
 cecho "[+]  mounting persistance partition on temporary work directory" "$green"
-if mount "$device"3 /tmp/usb-persistence &>> "$LOGFILE"; then
+if mount "$device"3 $temp_persist_dir &>> "$LOGFILE"; then
     cecho "[+] partition mounted" "$green"
 else
     cecho "[+] ERROR: Failed to mount partition, check the logfile" "$red"
@@ -330,7 +286,7 @@ mount_ISO()
 {
 # Mount the ISO on a temp folder to get the files moved
 cecho "[+]  " "$green"
-if mount -oro $live_iso_path /tmp/live-iso &>> "$LOGFILE";then
+if sudo mount -oro "$iso_path" $temp_live_iso_dir &>> "$LOGFILE";then
     cecho "[+]  " "$green"
 else
     cecho "[+] ERROR: Failed to mount live iso, check the logfile" "$red"
@@ -340,7 +296,7 @@ fi
 copy_ISO_to_tmp()
 {
 # copy files from live iso to live partition
-if cp -ar /tmp/live-iso/* /tmp/usb-live &>> "$LOGFILE";then
+if sudo cp -ar $temp_live_iso_dir/* $temp_live_dir &>> "$LOGFILE";then
     cecho "[+] copied filed from live iso to work directory" "$green"
 else
     cecho "[+] ERROR: Failed to copy live iso files, check the logfile" "$red"
@@ -353,7 +309,7 @@ enable_persistance()
 # https://unix.stackexchange.com/questions/282393/union-mount-on-linux
 cecho "[+] Adding Union mount line to conf " "$green"
 
-if echo "/ union" | tee /tmp/usb-persistence/persistence.conf &>> "$LOGFILE"; then
+if echo "/ union" | sudo tee $temp_persist_dir/persistence.conf &>> "$LOGFILE"; then
     cecho "[+] Added union mounting to live USB for persistance " "$green"
 else
     cecho "[+] ERROR: Failed to, check the logfile" "$red"
@@ -366,38 +322,42 @@ fi
 #So's we can install 32 bit OS to live disk.
 #########################
 ##| 64-BIT OS   #
-#########################
+#########################$temp_persist_dir
 
 install_grub_to_image()
 {
 # if using ARM devices
 if [ "$architecture" == "ARM" ]; then
-    cecho "[+] Installing GRUB2 for ${architecture} to /dev/${device}" "$yellow"
-    grub-install --removable --target=arm-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "${device}"
-    if [ "$?" = "0" ]; then
-        cecho "[+] GRUB2 Install Finished Successfully!" $green
+    cecho "[+] Installing GRUB2 for ${architecture} to ${device}" "$yellow"
+    if sudo grub-install --removable --target=arm-efi --boot-directory=$temp_live_dir/boot/ --efi-directory=$temp_efi_dir "${device}"
+    then
+    #if [ "$?" = "0" ]; then
+        cecho "[+] GRUB2 Install Finished Successfully!" "$green"
     else
-        error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> "$LOGFILE"
+        error_exit "[-]GRUB2 Install Failed! Check the logfile!" &>> "$LOGFILE" #1>&2 >> "$LOGFILE"
     fi
 fi
  
 # if using x86
 if [ "$architecture" == "X86" ]; then
-    cecho "[+] Installing GRUB2 for ${architecture} to /dev/${device}" $yellow
-    grub-install --removable --target=i386-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "${device}"
-    if [ "$?" = "0" ]; then
-        cecho "[+] GRUB2 Install Finished Successfully!" $green
+    cecho "[+] Installing GRUB2 for ${architecture} to ${device}" "$yellow"
+    if sudo grub-install --removable --target=i386-efi --boot-directory=$temp_live_dir/boot/ --efi-directory=$temp_efi_dir "${device}"
+    then
+    #if [ "$?" = "0" ]; then
+        cecho "[+] GRUB2 Install Finished Successfully!" "$green"
     else
-        error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> "$LOGFILE"
+        error_exit "[-]GRUB2 Install Failed! Check the logfile!" &>> "$LOGFILE" #1>&2 >> "$LOGFILE"
     fi
 fi
 
 if [ "$architecture" == "x64" ]; then
-    cecho "[+] Installing GRUB2 for ${architecture} to /dev/${device}" $yellow
-    if grub-install --removable --target=X86_64-efi --boot-directory=/tmp/usb-live/boot/ --efi-directory=/tmp/usb-efi "${device}"; then
+    cecho "[+] Installing GRUB2 for ${architecture} to ${device}" "$yellow"
+    if sudo grub-install --removable --target=X86_64-efi --boot-directory=$temp_live_dir/boot/ --efi-directory=$temp_efi_dir "${device}"
+    then
+    #if [ "$?" = "0" ]; then
         cecho "[+] GRUB2 Install Finished Successfully!" "$green"
     else
-        error_exit "[-]GRUB2 Install Failed! Check the logfile!" 1>&2 >> "$LOGFILE"
+        error_exit "[-]GRUB2 Install Failed! Check the logfile!" &>> "$LOGFILE" #1>&2 >> "$LOGFILE"
     fi
 fi
 }
@@ -414,69 +374,113 @@ dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of="${device}
 install_syslinux()
 {
 echo "${device}"2 | syslinux --install
-mv /tmp/usb-live/isolinux /tmp/usb-live/syslinux
-mv /tmp/usb-live/syslinux/isolinux.bin /tmp/usb-live/syslinux/syslinux.bin
-mv /tmp/usb-live/syslinux/isolinux.cfg /tmp/usb-live/syslinux/syslinux.cfg
+mv $temp_live_dir/isolinux $temp_live_dir/syslinux
+mv $temp_live_dir/syslinux/isolinux.bin $temp_live_dir/syslinux/syslinux.bin
+mv $temp_live_dir/syslinux/isolinux.cfg $temp_live_dir/syslinux/syslinux.cfg
 }
 
 # Magic, sets up syslinux configuration and layouts
 setup_boot_config()
 {
-sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
-sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 persistence/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
-sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 keyboard-layouts=en locales=en_US/}' /tmp/usb-live/boot/grub/grub.cfg /tmp/usb-live/syslinux/menu.cfg
-sed --in-place 's#isolinux/splash#syslinux/splash#' /tmp/usb-live/boot/grub/grub.cfg
+sed --in-place 's#isolinux/splash#syslinux/splash#' $temp_live_dir/boot/grub/grub.cfg
+sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 persistence/}' $temp_live_dir/boot/grub/grub.cfg $temp_live_dir/syslinux/menu.cfg
+sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 keyboard-layouts=en locales=en_US/}' $temp_live_dir/boot/grub/grub.cfg $temp_live_dir/syslinux/menu.cfg
+sed --in-place 's#isolinux/splash#syslinux/splash#' $temp_live_dir/boot/grub/grub.cfg
 }
 
 # Clean up!
 clean()
 {
-umount /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
-rmdir /tmp/usb-efi /tmp/usb-live /tmp/usb-persistence /tmp/live-iso
+sudo umount $temp_efi_dir $temp_live_dir $temp_persist_dir $temp_live_iso_dir
+sudo rmdir $temp_efi_dir $temp_live_dir $temp_persist_dir $temp_live_iso_dir
 }
 
-while getopts "a:l:d:g:h:v:" opt
-do
-   case "$opt" in
-      a ) architecture="$OPTARG" ;;
-      l ) live_iso_path="$OPTARG" ;;
-      d ) device="$OPTARG" ;;
-      g ) get_iso && exit;; # ="$OPTARG" ;;
-      h ) show_help ;;
-      ? ) show_help ;; # Print helpFunction in case parameter is non-existent
-   esac
+# put short options after -o without commas
+# put long options after --long, with commas
+# options that have no short option should have : after them, before the comma
+TEMP_OPTS=$(getopt -o aldgh: --long architecture,iso_path,device,get_new_iso,help -n 'create_live_usb' -- "$@")
+
+#if [ $? != 0 ] ; then 
+#    echo "Terminating..." >&2 ; exit 1 ; fi
+
+# Note the quotes around '$TEMP': they are essential!
+eval set -- "$TEMP_OPTS"
+
+while true; do
+    case "$1" in
+        --a | --architecture)   architecture="$2"; shift ;;
+        --l | --iso_path)       iso_path="$2"; shift ;;
+        --d | --device)         device="$2"; shift ;;
+        --g | --get_new_iso)    get_new_iso ;;
+        --h | --show_help )     show_help ;;
+        --  )                   shift; break ;;
+        *   )                   show_help; break ;;
+    esac
 done
+#while getopts "a:l:d:g:h:v:" opt
+#do
+#   case "$opt" in
+#      a | architecture) architecture="$OPTARG"; shift ;;
+#      l ) live_iso_path="$OPTARG"; shift ;;
+#      d ) device="$OPTARG"; shift ;;
+#      g ) get_new_iso ;; # ="$OPTARG" ;;
+#      h ) show_help ;;
+#      ? ) show_help ;; # Print helpFunction in case parameter is non-existent
+#   esac
+#done
 
 # these are REQUIRED params
 # Print help in case parameters are empty
 # -z means non-defined or empty
-if [ -z "$architecture" ] || [ -z "$live_iso_path" ] || [ -z "$device" ]
+if [ -z "$architecture" ] || [ -z "$iso_path" ] || [ -z "$device" ]
 then
    echo "$empty_required_args_error_message"
 else
     # creates temporary work directories
     set_temp_dirs
     # creates efi partition
-    setup_EFI
+    create_EFI
     # creates live os partition
-    setup_LIVE
+    create_LIVE
     # creates persistant data partition
-    setup_persistance
+    create_PERSISTANT
+
     # sets required flags on all partitions
     set_flags
+
+    # create filesystems for EFI,live, and persistant partitions
     create_EFI_VFAT_file_systems
     create_LIVE_VFAT_filesystem
     create_persistant_filesystem
+
+    # create temporary work directories for copying of files and mounting
+    # of filesystems
     create_temp_work_dirs
+
+    # mount the partitions on the temporary work directories
     mount_EFI
     mount_LIVE
     mount_PERSIST
+
+    # mount ISo file to begin copying data to USB
     mount_ISO
+
+    # copy files from mounted iso to temporary work directories
     copy_ISO_to_tmp
+
+    # enable union mounting of persistance partition over live partition
     enable_persistance
+
+    # install grub2 to device root and efi directory
     install_grub_to_image
+
+    # install syslinux to usb for legacy booting
     copy_syslinux_to_MBR
     install_syslinux
+
+    # configure grub2 for hybrid booting
     setup_boot_config
+
+    # clean up and exit gracefully
     clean
 fi
