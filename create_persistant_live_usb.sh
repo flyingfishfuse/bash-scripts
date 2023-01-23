@@ -6,55 +6,51 @@ LOGFILE="$0.logfile"
 
 show_help(){
 cat <<EOF 
- $PROG Live_USB_creator.sh 
+ $PROG create_live_usb.sh 
  This program makes a live USB with persistance utilizing syslinux
  CURRENTLY ONLY 64-BIT BOOTLOADER IS WORKING
  Usage: $PROG [OPTION...] [COMMAND]...
  Options:
-  --a, --architecture ARCH   amd64,x86,arm                              ( Required, Default: amd64 )
+  --a, --architecture ARCH    amd64,x86,arm                                (Required, Default: amd64 )
 
-  --l, --iso_path ISO_PATH   full system path to live iso file
-                             e.g. (/home/USER/Downloads/debian.iso)     ( Required, Default: NONE )
+  --l, --iso_path ISO_PATH    full system path to live iso file
+                              e.g. (/home/USER/Downloads/debian.iso)       (Default: /home/$USER/Downloads/debian.iso )
 
-  --d, --device DEVICE       The device to install the Distro to        ( Required, Default: NONE )
+  --d, --device DEVICE        The device to install the Distro to          (Required, Default: NONE )
 
-  --g, --get_new_iso         Downloads Debian iso from official sources ( Default: NONE )
-                             saves to /home/USER/Downloads/debian.iso
-                             use this function alone, then run the 
-                             program again with the expected args for
-                             creation of a live USB
+  --g, --get_new_iso          Downloads Debian iso from official sources   (Default: NONE )
+                              saves to /home/USER/Downloads/debian.iso
+                              use this function alone, then run the 
+                              program again with the expected args for
+                              creation of a live USB
 
-  --d, --use_debootstrap     Uses debootstrap to generate an iso of     ( Default: NONE )
-                             Debian that can be tailored to your 
-                             specifications
+  --d, --use_debootstrap      Uses debootstrap to generate an iso of       (Default: NONE )
+                              Debian that can be tailored to your 
+                              specifications
 
-  --s, --chroot_script       script to run on chroot when generating a  ( Default: NONE )
-                             custom Debian iso file, this must be a 
-                             system path
+  --s, --chroot_script        script to run on chroot when generating a    (Default: NONE )
+                              custom Debian iso file, this must be a 
+                              system path
 
-  --a, --architecture        debootstrap/grub ARCH (amd64,x86,arm)      ( Default: amd64 )
+  --a, --architecture         debootstrap/grub ARCH (amd64,x86,arm)        (Default: amd64 )
 
-  --i, --iso_path            path to live iso                           ( Default: /home/$USER/Downloads/debian.iso )
+  --f, --loop_device          loop device to create for mounting of images (DEFAULT: /dev/loop0)
 
-  --d, --device              device to use for liveUSB creation, the usb stick ( Default: NONE )
+  --b, --build_folder         full system path to folder you want to build the iso in ( Default: /home/$USER/build_folder )
 
-  --f, --loop_device         loop device to create for mounting of images (DEFAULT: /dev/loop0)
+  --o, --iso_output_location  location to put custom iso file              (Default: /home/$USER/build_folder )
 
-  --b, --build_folder        full system path to folder you want to build the iso in ( Default: /home/$USER/iso_build_folder )
+  --c, --custom_iso_name      custom name for custom iso                   (Default: custom_debian )
 
-  --o, --iso_output_location location to put custom iso file            ( Default: /home/$USER/iso_build_folder )
+  --r, --root_password        root password for chroot container           (Default: password )
 
-  --c, --custom_iso_name     custom name for custom iso                 ( Default: custom_debian.iso )
+  --n, --new_username         username for new debootstrap creations       (Default: $USER )
 
-  --r, --root_password       root password for root user in debootstrap chroot container ( Default: password )
-
-  --n, --new_username        username for new debootstrap creations     ( Default: $USER )
-
-  --p, --new_user_password   password for new debootstrap creations     ( Default: password )
+  --p, --new_user_password    password for new debootstrap creations       (Default: password )
   
   --m, --repository_mirror    debian mirror to use for apt in the chroot container (DEFAULT: "https://deb.debian.org/debian/" )
   
-  --v, --release              debian version to create/download (DEFAULT: stable)
+  --v, --release              debian version to create/download            (DEFAULT: stable)
   
   --e , --includes            Extra software to install in chroot for custom ISO (DEFAULT: linux-image-amd64,grub-pc,ssh,vim)
  
@@ -62,7 +58,7 @@ cat <<EOF
 
    Thanks:
     That one person on stackexchange who answered everything in one post.
-    The internet and search engines!
+    The internet and search engines (except google, it ignores half of what you type) !
 
  how-can-i-pass-a-command-line-argument-into-a-shell-script
  https://unix.stackexchange.com/questions/31414/
@@ -99,9 +95,6 @@ read -r -d '' empty_required_args_error_message<<'EOF'
 ###############################################################################
 EOF
 
-#-v, --version  Displays output version and exits
-#print_version_information(){}
-
 green="$(tput setaf 2)"
 red=$(tput setaf 1)
 yellow=$(tput setaf 3)
@@ -111,7 +104,7 @@ yellow=$(tput setaf 3)
 # Argument $2 = color
 cecho ()
 {
-  local default_msg="No message passed."
+  local default_msg="[-] No message passed."
   # Doesn't really need to be a local variable.
   # Message is first argument OR default
   # color is second argument
@@ -124,7 +117,7 @@ cecho ()
 
 error_exit()
 {
-echo "$1" red 1>&2 >> "$LOGFILE"
+cecho "$1" "$red" 1>&2 >> "$LOGFILE"
 exit 1
 }
 
@@ -138,14 +131,7 @@ cecho "[+] Run this program again with the operational arguments to perform the 
 exit
 }
 
-#set_source_live_iso()
-# {
-#source_live_iso=live.iso
-#}
-#temp_efi_dir="/tmp/usb-efi"
-#temp_live_dir="/tmp/usb-live"
-#temp_persist_dir="/tmp/usb-persistence"
-#temp_live_iso_dir="/tmp/live-iso"
+# creates temporary directories for mounting of partitions
 set_temp_dirs()
 {
 temp_efi_dir="/tmp/usb-efi"
@@ -154,34 +140,36 @@ temp_persist_dir="/tmp/usb-persistence"
 temp_live_iso_dir="/tmp/live-iso"
 }
 
+# create build hierarchy and image file for dd operations
 # works, dont change
 make_files()
 {
 # create the build folder
-echo "[+] Creating $iso_build_folder"
-mkdir "$iso_build_folder"
+echo "[+] Creating $build_folder"
+mkdir "$build_folder"
 
 # create the image file
-echo "[+] Creating $image_location"
-touch "$image_location.img"
+echo "[+] Creating $iso_output_location/$custom_iso_name.img"
+touch "$iso_output_location/$custom_iso_name.img"
 }
 
+# make image file and mount on loop device for chroot operations
 # works, dont change
 make_disk()
 {
 # fill image file to correct size with all zeros
-dd if=/dev/zero of="$image_location.img" bs=$block_size count=$block_count
+dd if=/dev/zero of= "$iso_output_location/$custom_iso_name.img" bs=$block_size count=$block_count
 # create loop device out of image file
-sudo losetup $loop_device "$image_location.img"
+sudo losetup "$loop_device" "$iso_output_location/$custom_iso_name.img"
 # create schema
-sudo parted -s $loop_device mklabel gpt
+sudo parted -s "$loop_device" mklabel gpt
 # create partition
-sudo parted -s $loop_device mkpart primary 1MiB 100%
+sudo parted -s "$loop_device" mkpart primary 1MiB 100%
 # create ext4 filesystem
 echo "y
-" | sudo mkfs.ext4 $loop_device
+" | sudo mkfs.ext4 "$loop_device"
 # mount loop device on iso build folder
-sudo mount $loop_device "$iso_build_folder"
+sudo mount "$loop_device""$build_folder"
 }
 
 build_new_os()
@@ -195,11 +183,11 @@ sudo apt update -y
 sudo apt upgrade -y 
 
 # begin the pull and install
-sudo debootstrap --arch "$ARCH" --include="$includes" "$release" "$iso_build_folder" "$REPOSITORY"
+sudo debootstrap --arch "$architecture" --include="$includes" "$release" "$build_folder" "$repository_mirror"
 # copy files necessary for networking and package managment
-sudo cp /etc/resolv.conf "$iso_build_folder/etc/resolv.conf"
-sudo cp /etc/apt/sources.list "$iso_build_folder/etc/apt/"
-sudo cp /etc/hosts "$iso_build_folder/etc/hosts"
+sudo cp /etc/resolv.conf "$build_folder/etc/resolv.conf"
+sudo cp /etc/apt/sources.list "$build_folder/etc/apt/"
+sudo cp /etc/hosts "$build_folder/etc/hosts"
 }
 
 prepare_chroot()
@@ -210,11 +198,11 @@ prepare_chroot()
 #mount --make-rslave --rbind /run /mnt/run
 #chroot /mnt /bin/bash
 # mount in preparation for chroot
-sudo mount -o bind /dev "$iso_build_folder/dev"
-sudo mount none -t devpts "$iso_build_folder/dev/pts"
-sudo mount -o bind -t proc /proc "$iso_build_folder/proc"
-sudo mount -o bind -t sys /sys "$iso_build_folder/sys"
-sudo mount --bind /run  "$iso_build_folder/run"
+sudo mount -o bind /dev "$build_folder/dev"
+sudo mount none -t devpts "$build_folder/dev/pts"
+sudo mount -o bind -t proc /proc "$build_folder/proc"
+sudo mount -o bind -t sys /sys "$build_folder/sys"
+sudo mount --bind /run  "$build_folder/run"
 }
 
 #######################################
@@ -230,14 +218,14 @@ sudo mount --bind /run  "$iso_build_folder/run"
 chroot_buildup(){
 # ROOT USER ONLY
 # perform scripted actions in chroot
-cat << EOF | sudo chroot "$iso_build_folder"
+cat << EOF | sudo chroot "$build_folder"
 
 # add user and set password
-echo "$chroot_new_user_password
-$chroot_new_user_password" | adduser "$chroot_new_username"
+echo "$new_user_password
+$new_user_password" | adduser "$new_username"
 
 # change root password
-echo "$chroot_root_password:$chroot_root_password" | chpasswd
+echo "$root_password:$root_password" | chpasswd
 
 
 # this step should be performed inside and outside the chroot
@@ -249,12 +237,15 @@ apt upgrade
 apt install --no-install-recommends -y install sudo debconf nano apt-transport-https ca-certificates curl gnupg lsb-release wget curl
 
 #add user to sudoers group
-usermod -aG sudo $chroot_new_username
+usermod -aG sudo $new_username
 EOF
 
-if $1; then
-    chroot_exec_heredoc $1
-fi
+# execute external script inside the chroot to perform actions further
+# customizing the live USB being created, this can involve anything you
+# wish, so long as it can be scripted
+#if $1; then
+#    chroot_exec_heredoc $1
+#fi
 }
 
 teardown_chroot()
@@ -565,7 +556,7 @@ short_opts="a:i:d:b:o:c:r:n:p:e:m:ugh"
 long_opts="architecture:,\
 iso_path:,\
 device:,\
-iso_build_folder,\
+build_folder,\
 iso_output_location,\
 custom_iso_name,\
 use_debootstrap,\
@@ -594,7 +585,7 @@ while true; do
         # device to use for liveUSB creation, the usb stick
         --d | --device)              device="$2"; shift 2;;
         # full system path to folder you want to build the iso in
-        --b | --build_folder)        iso_build_folder="$2"; shift 2;;
+        --b | --build_folder)        build_folder="$2"; shift 2;;
         # location to put custom iso file
         --o | --iso_output_location) iso_output_location"$2"; shift 2;;
         # custom name for custom iso
@@ -647,16 +638,16 @@ then
    echo "$empty_required_args_error_message"
 else
     # setting defaults if options not given on command line
-    if [ -z "$repository_mirror" ] || [ -z "$release" ] || [ -z "$includes" ] || [ -z "$iso_build_folder" ] || \
+    if [ -z "$repository_mirror" ] || [ -z "$release" ] || [ -z "$includes" ] || [ -z "$build_folder" ] || \
     [ -z "$root_password" ] || [ -z "$new_username" ] || [ -z "$new_user_password" ] || [ -z "$iso_output_location" ] || \
-    [ -z "$custom_iso_name" ] || [ -z $loop_device ]
+    [ -z "$custom_iso_name" ] || [ -z "$loop_device" ]
     then
         # folder to create and build iso inside of
-        iso_build_folder="/home/$USER/iso_build_folder"
+        build_folder="/home/$USER/build_folder"
         # what to name the custom iso file
         custom_iso_name="custom_debian.iso"
         # location of output file when building iso
-        iso_output_location="$iso_build_folder/$custom_iso_name.iso"
+        iso_output_location="$build_folder/$custom_iso_name.iso"
         # root password for root user in debootstrap chroot container
         root_password="password"
         # username for new debootstrap creations
