@@ -1,9 +1,9 @@
 #!/bin/bash
-
+# shellcheck disable=SC2024
 PROG=${0##*/}
 LOGFILE="$0.logfile"
 script_name=$0
-script_full_path=$(dirname "$script_name")
+#script_full_path=$(dirname "$script_name")
 #die() { echo $@ >&2; exit 2; }
 
 show_help(){
@@ -250,28 +250,6 @@ echo "[+] Creating $iso_output_location/$custom_iso_name.img"
 touch "$iso_output_location/$custom_iso_name.img"
 }
 
-#######################################
-# CUSTOM ISO CFLOW
-# make image file and mount on loop device
-# for chroot operations
-# works, dont change
-custom_make_disk()
-{
-    #create the blank image
-    custom_create_blank_image
-    # mount image as loop device
-    custom_create_loop_device_by_mounting_image
-    # create gpt partition table
-    custom_create_partition_table_on_loop_device
-    # initialize a primary partition
-    custom_create_primary_partition
-    # create ext4 filesystem
-    custom_create_ext4_filesystem
-    # mount loop device on build folder to build into OS
-    # using debootstrap
-    mount_loop_device_on_build_folder
-}
-
 # use DD to create blank image for mounting
 custom_create_blank_image(){
 # fill image file to correct size with all zeros
@@ -283,9 +261,9 @@ else
     exit
 fi
 }
+
 # create new loop device and mount empty image on it
 custom_create_loop_device_by_mounting_image(){
-# create loop device out of image file
 if sudo losetup "$loop_device" "$iso_output_location/$custom_iso_name.img" &>> "$LOGFILE";then
     cecho "[+] Loop device $loop_device has been created and image file has been mounted on it" "$green"
 else
@@ -293,10 +271,10 @@ else
     cecho "[-] EXITING!" "$red"
     exit
 fi }
+
 # create gpt partition table on iso image
 custom_create_partition_table_on_loop_device()
 {
-# create schema
 if sudo parted -s "$loop_device" mklabel gpt &>> "$LOGFILE";then
     cecho "[+] GPT partitioning schema created on $loop_device" "$green"
 else
@@ -308,7 +286,6 @@ fi
 # initialize primary partition
 custom_create_primary_partition()
 {
-# create partition
 if sudo parted -s "$loop_device" mkpart primary 1MiB 100% &>> "$LOGFILE";then
     cecho "[+] EXT4 filesystem created " "$green"
 else
@@ -341,6 +318,21 @@ else
     cecho "[-] EXITING!"
     exit
 fi
+}
+
+mount_for_chroot()
+{
+#mount --make-rslave --rbind /proc /mnt/proc
+#mount --make-rslave --rbind /sys /mnt/sys
+#mount --make-rslave --rbind /dev /mnt/dev
+#mount --make-rslave --rbind /run /mnt/run
+#chroot /mnt /bin/bash
+# mount in preparation for chroot
+sudo mount -o bind /dev "$build_folder/dev"
+sudo mount none -t devpts "$build_folder/dev/pts"
+sudo mount -o bind -t proc /proc "$build_folder/proc"
+sudo mount -o bind -t sys /sys "$build_folder/sys"
+sudo mount --bind /run  "$build_folder/run"
 }
 
 build_new_os()
@@ -412,20 +404,6 @@ else
 fi
 }
 
-prepare_chroot()
-{
-#mount --make-rslave --rbind /proc /mnt/proc
-#mount --make-rslave --rbind /sys /mnt/sys
-#mount --make-rslave --rbind /dev /mnt/dev
-#mount --make-rslave --rbind /run /mnt/run
-#chroot /mnt /bin/bash
-# mount in preparation for chroot
-sudo mount -o bind /dev "$build_folder/dev"
-sudo mount none -t devpts "$build_folder/dev/pts"
-sudo mount -o bind -t proc /proc "$build_folder/proc"
-sudo mount -o bind -t sys /sys "$build_folder/sys"
-sudo mount --bind /run  "$build_folder/run"
-}
 run_external_script_in_chroot1()
 {
 # get name of extra script file
@@ -529,23 +507,6 @@ sudo genisoimage -o "$iso_output_location/$custom_iso_name.iso" \
 
 }
 
-debootstrap_process()
-{
-custom_make_disk
-
-build_new_os 
-prepare_chroot
-# "$new_username" "$new_user_password" "$root_password"
-if chroot_buildup "$1" "$2" "$3";then
-    cecho "[+] Chroot finished" "$green"
-    if teardown_chroot;then
-        cecho "[-] Chroot teardown complete" "$green"
-    fi
-    else
-        cecho "[-] Failed to modify in chroot environment, check the logfile" "$red"
-fi
-create_bootable_iso
-}
 # creates /dev/xx1 EFI boot partition
 # This creates the basic disk structure of an EFI disk with a single OS.
 create_EFI()
@@ -667,7 +628,7 @@ fi
 create_temp_work_dirs()
 {
 cecho "[+] creating temporary work directories " "$green"
-if sudo mkdir $temp_efi_dir $temp_live_dir $temp_persist_dir $temp_live_iso_dir &>> "$LOGFILE"; then
+if sudo mkdir "$temp_efi_dir" "$temp_live_dir" "$temp_persist_dir" "$temp_live_iso_dir" &>> "$LOGFILE"; then
     cecho "[+] Temporary work directories created" "$green"
 else
     cecho "[+] ERROR: Failed to create temporary work directories, check the logfile" "$red"
@@ -679,7 +640,7 @@ fi
 mount_EFI()
 {
 cecho "[+] mounting EFI partition on temporary work directory" "$green"
-if sudo mount "$device"1 $temp_efi_dir &>> "$LOGFILE";then
+if sudo mount "$device"1 "$temp_efi_dir" &>> "$LOGFILE";then
     cecho "[+] partition mounted" "$green"
 else
     cecho "[+]  ERROR: Failed to mount partition, check the logfile" "$red"
@@ -908,8 +869,49 @@ else
     fi
 fi
 }
+#######################################
+# CUSTOM ISO CFLOW
+# make image file and mount on loop device
+# for chroot operations
+# param1: new_username
+# param2: new_user_password
+# param3: root_password
+custom_make_disk()
+{
+    #create the blank image
+    custom_create_blank_image
+    # mount image as loop device
+    custom_create_loop_device_by_mounting_image
+    # create gpt partition table
+    custom_create_partition_table_on_loop_device
+    # initialize a primary partition
+    custom_create_primary_partition
+    # create ext4 filesystem
+    custom_create_ext4_filesystem
+    # mount loop device on build folder to build into OS
+    # using debootstrap
+    mount_loop_device_on_build_folder
+    # uses debootstrap to create pre-OS in chroot directory
+    build_new_os
+    # mounts all chroot requisite host directories in build folder
+    mount_for_chroot
+    # performs a chroot and creates new user and sets passwords
+    if chroot_buildup "$1" "$2" "$3";then
+        cecho "[+] Chroot finished" "$green"
+    # unmounts all host directories from chroot to begin next step
+    if teardown_chroot;then
+        cecho "[-] Chroot teardown complete" "$green"
+    fi
+    else
+        cecho "[-] Failed to modify in chroot environment, check the logfile" "$red"
+    fi
+    # creates an iso to use in the live USB creation
+    create_bootable_iso
+}
 main()
 {
+    ###################################
+    #
     # creates temporary work directories
     set_temp_dirs
     # creates efi partition
@@ -922,7 +924,7 @@ main()
     # sets required flags on all partitions
     set_flags
 
-    # create filesystems for EFI,live, and persistant partitions
+    # create filesystems for EFI, live, and persistant partitions
     create_EFI_VFAT_file_systems
     create_LIVE_VFAT_filesystem
     create_persistant_filesystem
@@ -943,7 +945,7 @@ main()
     # and specialized
     if $use_debootstrap; then
         # creates an iso using debootstrap to customize the OS
-        debootstrap_process "$new_username" "$new_user_password" "$root_password"
+        custom_make_disk "$new_username" "$new_user_password" "$root_password"
     else
         # mount ISO file to begin copying data to USB
         mount_ISO
