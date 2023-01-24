@@ -245,21 +245,22 @@ make_files()
 echo "[+] Creating $build_folder"
 mkdir "$build_folder"
 
-# create the image file
-echo "[+] Creating $iso_output_location/$custom_iso_name.img"
-touch "$iso_output_location/$custom_iso_name.img"
 }
 
 # use DD to create blank image for mounting
 custom_create_blank_image(){
-# fill image file to correct size with all zeros
-if sudo dd if=/dev/zero of= "$iso_output_location/$custom_iso_name.img" bs=$block_size count=$block_count &>> "$LOGFILE";then
-    cecho "[+] Blank image created using dd" "$green"
-else
-    cecho "[-] failed to create blank image using dd, check the logfile" "$red"
-    cecho "[-] EXITING!" "$red"
-    exit
-fi
+    # create the image file
+    echo "[+] Creating $iso_output_location/$custom_iso_name.img"
+    touch "$iso_output_location/$custom_iso_name.img"
+
+    # fill image file to correct size with all zeros
+    if sudo dd if=/dev/zero of= "$iso_output_location/$custom_iso_name.img" bs=$block_size count=$block_count &>> "$LOGFILE";then
+        cecho "[+] Blank image created using dd" "$green"
+    else
+        cecho "[-] failed to create blank image using dd, check the logfile" "$red"
+        cecho "[-] EXITING!" "$red"
+        exit
+    fi
 }
 
 # create new loop device and mount empty image on it
@@ -509,7 +510,7 @@ sudo genisoimage -o "$iso_output_location/$custom_iso_name.iso" \
 
 # creates /dev/xx1 EFI boot partition
 # This creates the basic disk structure of an EFI disk with a single OS.
-create_EFI()
+create_EFI_partition()
 {
 
 # check for flag before attempting operation
@@ -531,7 +532,7 @@ fi
 # creates /dev/xxx2 LIVE disk partition
 # you can chroot into the filesystem created by the usage of unsquashfs
 # to modify the OS
-create_LIVE()
+create_LIVE_partition()
 {
 cecho "[+]  checking if LIVE partition has already been created" "$green"
 if sudo partprobe -d -s "$device"2; then
@@ -548,7 +549,7 @@ fi
 
 # creates /dev/xxx3 Persistance Partition
 # You CAN boot .ISO Files from the persistance partition if you mount in GRUB2
-create_PERSISTANT()
+create_PERSISTANT_partition()
 {
 cecho "[+]  checking if PERSISTANCE partition has already been created" "$green"
 if sudo partprobe -d -s "$device"3; then
@@ -562,7 +563,7 @@ else
     fi
 fi
 }
-set_flags()
+set_flags_on_USB_partitions()
 {
 # Sets filesystem flag
 cecho "[+] setting msftdata flag" "$green"
@@ -590,7 +591,7 @@ else
 fi
 }
 
-create_EFI_VFAT_file_systems()
+create_EFI_VFAT_file_systems_on_USB()
 {
 # Here we make the filesystems for the OS to live on
 # EFI
@@ -603,7 +604,7 @@ fi
 }
 
 # LIVE disk partition
-create_LIVE_VFAT_filesystem()
+create_LIVE_VFAT_filesystem_on_USB()
 {
 cecho "[+] creating vfat on LIVE partition" "$green"
 if sudo mkfs.vfat -n LIVE "${device}"2 &>> "$LOGFILE"; then
@@ -613,7 +614,7 @@ else
 fi
 }
 
-create_persistant_filesystem()
+create_persistant_filesystem_on_USB()
 {
 # Persistance Partition
 cecho "[+] creating ext4 on persistance partition" "$green"
@@ -625,8 +626,17 @@ fi
 }
 
 # Creating Temporary work directories
-create_temp_work_dirs()
+create_temp_work_dirs_on_HOST()
 {
+# create the build folder
+echo "[+] Creating $build_folder"
+if mkdir "$build_folder" &>> "$LOGFILE"; then
+    cecho "[+] Build folder created" "$green"
+else
+    cecho "[+] ERROR: Failed to create temporary work directory, check the logfile" "$red"
+    exit
+fi
+# create the temp directories for moving files to hardware device
 cecho "[+] creating temporary work directories " "$green"
 if sudo mkdir "$temp_efi_dir" "$temp_live_dir" "$temp_persist_dir" "$temp_live_iso_dir" &>> "$LOGFILE"; then
     cecho "[+] Temporary work directories created" "$green"
@@ -637,7 +647,7 @@ fi
 }
 
 # Mounting those directories on the newly created filesystem
-mount_EFI()
+mount_EFI_on_HOST()
 {
 cecho "[+] mounting EFI partition on temporary work directory" "$green"
 if sudo mount "$device"1 "$temp_efi_dir" &>> "$LOGFILE";then
@@ -648,10 +658,10 @@ else
 fi
 }
 
-mount_LIVE()
+mount_LIVE_on_HOST()
 {
 cecho "[+] mounting LIVE partition on temporary work directory" "$green"
-if sudo mount "$device"2 $temp_live_dir &>> "$LOGFILE"; then
+if sudo mount "$device"2 "$temp_live_dir" &>> "$LOGFILE"; then
     cecho "[+] partition mounted" "$green"
 else
     cecho "[+] ERROR: Failed to mount partition , check the logfile" "$red"
@@ -659,31 +669,33 @@ else
 fi
 }
 
-mount_PERSIST()
+mount_PERSIST_on_HOST()
 {
 cecho "[+]  mounting persistance partition on temporary work directory" "$green"
-if mount "$device"3 $temp_persist_dir &>> "$LOGFILE"; then
+if mount "$device"3 "$temp_persist_dir" &>> "$LOGFILE"; then
     cecho "[+] partition mounted" "$green"
 else
     cecho "[+] ERROR: Failed to mount partition, check the logfile" "$red"
 fi
 }
 
-mount_ISO()
+# mounts iso on temporary directory
+#param1: path to iso for mounting on temp directory
+mount_ISO_on_HOST()
 {
 # Mount the ISO on a temp folder to get the files moved
-cecho "[+]  " "$green"
-if sudo mount -oro "$iso_path" $temp_live_iso_dir &>> "$LOGFILE";then
-    cecho "[+]  " "$green"
+cecho "[+] Mounting ISO file on temporary directory " "$green"
+if sudo mount -oro "$1" "$temp_live_iso_dir" &>> "$LOGFILE";then
+    cecho "[+] ISO file has been successfully mounted" "$green"
 else
     cecho "[+] ERROR: Failed to mount live iso, check the logfile" "$red"
 fi
 }
 
-copy_ISO_to_tmp()
+copy_ISO_to_LIVE()
 {
 # copy files from live iso to live partition
-if sudo cp -ar $temp_live_iso_dir/* $temp_live_dir &>> "$LOGFILE";then
+if sudo cp -ar "$temp_live_iso_dir"/* "$temp_live_dir" &>> "$LOGFILE";then
     cecho "[+] copied filed from live iso to work directory" "$green"
 else
     cecho "[+] ERROR: Failed to copy live iso files, check the logfile" "$red"
@@ -914,30 +926,41 @@ main()
     #
     # creates temporary work directories
     set_temp_dirs
-    # creates efi partition
-    create_EFI
-    # creates live os partition
-    create_LIVE
-    # creates persistant data partition
-    create_PERSISTANT
 
+###############################################################################
+# These are actions applied to the USB device that will be used as a LIVE os
+###############################################################################
+    # creates efi partition
+    create_EFI_partition
+    # creates live os partition
+    create_LIVE_partition
+    # creates persistant data partition
+    create_PERSISTANT_partition
+    
     # sets required flags on all partitions
-    set_flags
+    set_flags_on_USB_partitions
 
     # create filesystems for EFI, live, and persistant partitions
-    create_EFI_VFAT_file_systems
-    create_LIVE_VFAT_filesystem
-    create_persistant_filesystem
+    create_EFI_VFAT_file_systems_on_USB
+    create_LIVE_VFAT_filesystem_on_USB
+    create_persistant_filesystem_on_USB
+
+###############################################################################
+# These are actions applied to the HOST system that is creating the Live OS
+###############################################################################
 
     # create temporary work directories for copying of files and mounting
     # of filesystems
-    create_temp_work_dirs
+    create_temp_work_dirs_on_HOST
 
     # mount the partitions on the temporary work directories
-    mount_EFI
-    mount_LIVE
-    mount_PERSIST
+    mount_EFI_on_HOST
+    mount_LIVE_on_HOST
+    mount_PERSIST_on_HOST
 
+###############################################################################
+# This is the branch where it will either use debootstrap or a prebuilt ISO
+###############################################################################
     # obtaining the data for an OS from one of two sources
     # whether a premade OS direct from debian mirrors
     # or using the utility "debootstrap" to create an OS in
@@ -945,13 +968,14 @@ main()
     # and specialized
     if $use_debootstrap; then
         # creates an iso using debootstrap to customize the OS
+        # this places the iso in the location specified as $iso_path
         custom_make_disk "$new_username" "$new_user_password" "$root_password"
     else
         # mount ISO file to begin copying data to USB
-        mount_ISO
+        mount_ISO  "$iso_path"
     fi
     # copy files from mounted iso to temporary work directories
-    copy_ISO_to_tmp
+    copy_ISO_to_LIVE
 
     # enable union mounting of persistance partition over live partition
     enable_persistance
