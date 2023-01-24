@@ -250,10 +250,30 @@ echo "[+] Creating $iso_output_location/$custom_iso_name.img"
 touch "$iso_output_location/$custom_iso_name.img"
 }
 
-# make image file and mount on loop device for chroot operations
+#######################################
+# CUSTOM ISO CFLOW
+# make image file and mount on loop device
+# for chroot operations
 # works, dont change
-make_disk()
+custom_make_disk()
 {
+    #create the blank image
+    custom_create_blank_image
+    # mount image as loop device
+    custom_create_loop_device_by_mounting_image
+    # create gpt partition table
+    custom_create_partition_table_on_loop_device
+    # initialize a primary partition
+    custom_create_primary_partition
+    # create ext4 filesystem
+    custom_create_ext4_filesystem
+    # mount loop device on build folder to build into OS
+    # using debootstrap
+    mount_loop_device_on_build_folder
+}
+
+# use DD to create blank image for mounting
+custom_create_blank_image(){
 # fill image file to correct size with all zeros
 if sudo dd if=/dev/zero of= "$iso_output_location/$custom_iso_name.img" bs=$block_size count=$block_count &>> "$LOGFILE";then
     cecho "[+] Blank image created using dd" "$green"
@@ -261,7 +281,10 @@ else
     cecho "[-] failed to create blank image using dd, check the logfile" "$red"
     cecho "[-] EXITING!" "$red"
     exit
-fi    
+fi
+}
+# create new loop device and mount empty image on it
+custom_create_loop_device_by_mounting_image(){
 # create loop device out of image file
 if sudo losetup "$loop_device" "$iso_output_location/$custom_iso_name.img" &>> "$LOGFILE";then
     cecho "[+] Loop device $loop_device has been created and image file has been mounted on it" "$green"
@@ -269,7 +292,10 @@ else
     cecho "[-] Failed to mount image on new loop device, check the logfile" "$red"
     cecho "[-] EXITING!" "$red"
     exit
-fi    
+fi }
+# create gpt partition table on iso image
+custom_create_partition_table_on_loop_device()
+{
 # create schema
 if sudo parted -s "$loop_device" mklabel gpt &>> "$LOGFILE";then
     cecho "[+] GPT partitioning schema created on $loop_device" "$green"
@@ -277,15 +303,44 @@ else
     cecho "[-] Failed to initialize partionting scheme 'GPT' on $loop_device, check the logfile" "$red"
     cecho "[-] EXITING!" "$red"
     exit
-fi    
+fi
+}
+# initialize primary partition
+custom_create_primary_partition()
+{
 # create partition
+if sudo parted -s "$loop_device" mkpart primary 1MiB 100% &>> "$LOGFILE";then
+    cecho "[+] EXT4 filesystem created " "$green"
+else
+    cecho "[+] Failed to create EXT4 filesystem on $loop_device, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
+}
 
-sudo parted -s "$loop_device" mkpart primary 1MiB 100%
-# create ext4 filesystem
-echo "y
-" | sudo mkfs.ext4 "$loop_device"
+# create ext4 filesystem on custom iso image
+custom_create_ext4_filesystem()
+{
+if echo "y
+" | sudo mkfs.ext4 "$loop_device" &>> "$LOGFILE";then
+    cecho "[+] EXT4 filesystem created " "$green"
+else
+    cecho "[+] Failed to create EXT4 filesystem on $loop_device, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
+}
+
 # mount loop device on iso build folder
-sudo mount "$loop_device""$build_folder"
+mount_loop_device_on_build_folder()
+{
+if sudo mount "$loop_device" "$build_folder"; then
+    cecho "[+] $build_folder mounted on $loop_device" "$green"
+else
+    cecho "[+] Failed to mount $build_folder on $loop_device, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
 }
 
 build_new_os()
@@ -295,15 +350,66 @@ build_new_os()
 # TODO: check for "E: Couldn't download packages:" and interrupt to run again
 
 # these NEED to be run, you WILL encounter an error if packages mismatch
-sudo apt update -y
-sudo apt upgrade -y 
+
+# update package information
+if sudo apt update -y &>> "$LOGFILE"
+then
+    cecho "[+] Apt repo data updated" "$green"
+else
+    cecho "[-] Failed to update system package information, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
+
+# upgrade packages in preparation for debootstrap and chroot operations
+if sudo apt upgrade -y &>> "$LOGFILE"
+then
+    cecho "[+] System Packages Updated" "$green"
+else
+    cecho "[-] Failed to update system packages, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
 
 # begin the pull and install
-sudo debootstrap --arch "$architecture" --include="$includes" "$release" "$build_folder" "$repository_mirror"
-# copy files necessary for networking and package managment
-sudo cp /etc/resolv.conf "$build_folder/etc/resolv.conf"
-sudo cp /etc/apt/sources.list "$build_folder/etc/apt/"
-sudo cp /etc/hosts "$build_folder/etc/hosts"
+if sudo debootstrap --arch "$architecture" --include="$includes" "$release" "$build_folder" "$repository_mirror" &>> $LOGFILE
+then
+    cecho "[+] Debootstrap has created an OS structure in the guest hierarchy" "$green"
+else
+    cecho "[-] debootstrap process failed, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
+
+# copy dns info to enable networking
+if sudo cp /etc/resolv.conf "$build_folder/etc/resolv.conf" &>> $LOGFILE
+then
+    cecho "[+] resolve.conf copied to guest" "$green"
+else
+    cecho "[-] Failed to copy resolve.conf to guest, check the logfile " "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
+
+# copy apt package sources
+if sudo cp /etc/apt/sources.list "$build_folder/etc/apt/" &>> $LOGFILE
+then
+    cecho "[+] sources.list copied to guest" "$green"
+else
+    cecho "[-] failed to copy sources.list to guest, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
+
+
+if sudo cp /etc/hosts "$build_folder/etc/hosts" &>> $LOGFILE
+then
+    cecho "[+] Hosts file copied to guest" "$green"
+else
+    cecho "[-] Failed to copy hosts file to guest, check the logfile" "$red"
+    cecho "[-] EXITING!"
+    exit
+fi
 }
 
 prepare_chroot()
@@ -320,19 +426,6 @@ sudo mount -o bind -t proc /proc "$build_folder/proc"
 sudo mount -o bind -t sys /sys "$build_folder/sys"
 sudo mount --bind /run  "$build_folder/run"
 }
-
-# this currently doesnt work right
-# it exits and re-enters the chroot after 
-# every line
-run_external_script_in_chroot()
-{
-while read line; do
-    cat << EOF | sudo chroot "/home/$USER/build_folder"
-$line
-EOF
-done < "$chroot_script"
-}
-
 run_external_script_in_chroot1()
 {
 # get name of extra script file
@@ -343,22 +436,6 @@ sudo cp "$chroot_script" "$build_folder"
 sudo chroot "$build_folder" "sh -c 'chmod +x ${script_name} && ./${script_name}'"
 }
 
-# this works to serialize the script as raw text
-# this is a working method, I dont like it.
-# I will keep looking for a better one
-run_external_script_in_chroot2()
-{
-new_script=""
-while read line; do
-  new_script+="$line\n"
-done < "$chroot_script"
-
-new_script=$(cat << EOF
-$new_script
-EOF
-)
-echo "$new_script"
-}
 #######################################
 # Chroots into the iso build folder to
 # finish building the filesystem of the
@@ -454,16 +531,8 @@ sudo genisoimage -o "$iso_output_location/$custom_iso_name.iso" \
 
 debootstrap_process()
 {
-if make_files;then
-    cecho "[+] requisite hierarchy created" "$green"
-else
-    cecho "[-] failed to create necessary files, check the logfile" "$red"
-fi
-if make_disk;then
-    cecho "[+] " "$green"
-else
-    cecho "[-] " "$red"
-fi
+custom_make_disk
+
 build_new_os 
 prepare_chroot
 # "$new_username" "$new_user_password" "$root_password"
