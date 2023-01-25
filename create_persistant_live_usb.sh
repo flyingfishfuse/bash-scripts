@@ -166,6 +166,36 @@ while true; do
     esac
 done
 
+# this section is for arrays used when selecting extra sets of software to install in the live OS
+c_dev_package_list=("man-db" \
+"manpages" \
+"manpages-dev" \
+"manpges-posix-dev" \
+"gdb" \
+"lldb" \
+"valgrind" \
+"strace" \
+"bison" \
+"flex" \
+"clang" \
+"clang-tidy" \
+"clang-format" \
+"astyle" \
+"cmake" \
+"cmake-doc" \
+)
+
+install_prerequisite_packages()
+{
+sudo apt-get install \
+    binutils \
+    debootstrap \
+    squashfs-tools \
+    xorriso \
+    grub-pc-bin \
+    grub-efi-amd64-bin \
+    mtools
+}
 #set_defaults()
 ##{
 ## folder to create and build iso inside of
@@ -395,7 +425,7 @@ else
 fi
 
 
-if sudo cp /etc/hosts "$build_folder/etc/hosts" &>> $LOGFILE
+if sudo cp /etc/hosts "$build_folder/etc/hosts" &>> "$LOGFILE"
 then
     cecho "[+] Hosts file copied to guest" "$green"
 else
@@ -403,6 +433,21 @@ else
     cecho "[-] EXITING!"
     exit
 fi
+}
+
+#######################################
+# gets filename by stripping path
+# param1: full path to file
+get_file_name_no_path()
+{
+#get file name without the path:
+filename=$(basename -- "$1")
+#extension="${filename##*.}"
+filename="${filename%.*}"
+# Alternatively, you can focus on the last '/' of the path instead of the '.''
+# which should work even if you have unpredictable file extensions:
+#filename="${1##*/}"
+echo "$filename"
 }
 
 run_external_script_in_chroot1()
@@ -430,6 +475,64 @@ chroot_buildup(){
 # perform scripted actions in chroot
 cat << EOF | sudo chroot "$build_folder"
 
+# this step should be performed inside and outside the chroot
+apt update
+apt upgrade
+
+apt-get install -y libterm-readline-gnu-perl systemd-sysv
+
+apt install --no-install-recommends -y install sudo debconf nano apt-transport-https ca-certificates curl gnupg lsb-release wget curl \
+xorg xinit openbox fluxbox gparted \
+casper \
+lupin-casper \
+discover \
+laptop-detect \
+os-prober \
+network-manager \
+resolvconf \
+net-tools \
+wireless-tools \
+wpagui \
+locales \
+grub-common \
+grub-gfxpayload-lists \
+grub-pc \
+grub-pc-bin \
+grub2-common \
+git \
+thunar \
+nvim \
+tmux \
+exa \
+
+# The /etc/machine-id file contains the unique machine ID of the local system 
+# that is set during installation or boot. The machine ID is a single 
+# newline-terminated, hexadecimal, 32-character, lowercase ID. When decoded 
+# from hexadecimal, this corresponds to a 16-byte/128-bit value. 
+# This ID may not be all zeros.
+
+dbus-uuidgen > /etc/machine-id
+ln -fs /etc/machine-id /var/lib/dbus/machine-id
+
+# dpkg-divert is the utility used to set up and update the list of diversions.
+
+dpkg-divert --local --rename --add /sbin/initctl
+ln -s /bin/true /sbin/initctl
+
+# configure network manager
+cat << NET > /etc/NetworkManager/NetworkManager.conf
+[main]
+rc-manager=resolvconf
+plugins=ifupdown,keyfile
+dns=dnsmasq
+
+[ifupdown]
+managed=false
+NET
+# apply new configuration
+dpkg-reconfigure network-manager
+
+
 # add user and set password
 echo "$2
 $2" | adduser "$1"
@@ -437,27 +540,87 @@ $2" | adduser "$1"
 # change root password
 echo "$3:$3" | chpasswd
 
-
-# this step should be performed inside and outside the chroot
-apt update
-apt upgrade
-
-# install prerequisites for third party apt installs
-
-apt install --no-install-recommends -y install sudo debconf nano apt-transport-https ca-certificates curl gnupg lsb-release wget curl
-
 #add user to sudoers group
 usermod -aG sudo $1
+
 EOF
 
 }
 
+# adds vscode installtion to the pipeline
+chroot_install_vscode()
+{
+cat << EOF | sudo chroot "$build_folder"
+curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
+
+install -o root -g root -m 644 microsoft.gpg /etc/apt/trusted.gpg.d/
+
+echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list
+
+rm microsoft.gpg
+EOF
+}
+
+#######################################
+# Installs software development tooling
+# param1: array of package names for apt install
+chroot_install_development_tooling()
+{
+if [ "$1" == 1 ]; then
+cat << PACKAGES | sudo chroot "$build_folder"
+# switch to new user
+su - $new_username
+
+# use sudo to cache password
+echo $new_user_password | sudo -S echo "Sudo password used to cache for operations"
+
+sudo apt install \
+$(
+    for s in "${1[@]}"
+    do
+      echo "$s \\"
+    done
+)
+
+PACKAGES
+fi
+}
+test_array=("a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l")
+test_heredoc=$(cat << TEST | chroot $build_folder
+$(
+    for s in "${test_array[@]}"
+    do
+      #printf "%s \\" "$s \n"
+      echo "$s"
+    done
+)
+TEST
+)
+echo "$test_heredoc"
 teardown_chroot()
 {
 # unmount chroot pipelines
 #umount -lf /proc
 #umount -lf /sys
 #umount -lf /dev/pts
+cat << TEARDOWN | sudo chroot "$build_folder"
+apt-get clean
+
+truncate -s 0 /etc/machine-id
+
+dpkg-divert --rename --remove /sbin/initctl
+
+rm /sbin/initctl
+rm /var/lib/dbus/machine-id
+rm -rf /tmp/* ~/.bash_history
+
+umount /proc
+umount /sys
+umount /dev/pts
+export HISTSIZE=0
+exit
+TEARDOWN
+
 if sudo umount "$build_folder/dev";then
     cecho "[+] Unmounted /dev" "$green"
 else
@@ -499,13 +662,42 @@ fi
 #not done
 create_bootable_iso()
 {
+mkdir -p "$temp_live_iso_dir"/{casper,isolinux,install}
+
+# move kernel and initial ramdisk and EFI programs from the debootstrap folder to the iso build folder
+sudo cp "$build_folder"/boot/vmlinuz-**-**-generic "$temp_live_iso_dir"/casper/vmlinuz
+sudo cp "$build_folder"/boot/initrd.img-**-**-generic "$temp_live_iso_dir"/casper/initrd
+sudo cp "$build_folder"/boot/memtest86+.bin "$temp_live_iso_dir"/install/memtest86+
+
+#get memtest
+wget --progress=dot https://www.memtest86.com/downloads/memtest86-usb.zip -O "$temp_live_iso_dir"/install/memtest86-usb.zip
+
+#install memtest
+unzip -p "$temp_live_iso_dir"/install/memtest86-usb.zip memtest86-usb.img > "$temp_live_iso_dir"/install/memtest86
+
+# clean up memtest
+rm -f "$temp_live_iso_dir"/install/memtest86-usb.zip
+
+#create squashfs
+sudo mksquashfs squashfs-root filesystem.squashfs -b 1048576 -comp xz -Xdict-size 100%
+
 sudo genisoimage -o "$iso_output_location/$custom_iso_name.iso" \
 -b isolinux/isolinux.bin \
 -c isolinux/boot.cat \
 -no-emul-boot \
 -boot-load-size 4 \
 -boot-info-table /
-
+#Used genisoimage -r -V "Ubuntu" \
+# -cache-inodes -J -l \
+#-b isolinux/isolinux.bin \
+#-c isolinux/boot.cat \
+#-no-emul-boot \
+#-boot-load-size 4 \
+#-boot-info-table \
+#-o ironpig.iso \
+#FC5/ 
+#
+# to build a .iso (FC5 being the directory I extracted ubuntu.iso into).
 }
 
 # creates /dev/xx1 EFI boot partition
@@ -926,6 +1118,7 @@ main()
     #
     # creates temporary work directories
     set_temp_dirs
+    install_prerequisite_packages
 
 ###############################################################################
 # These are actions applied to the USB device that will be used as a LIVE os
