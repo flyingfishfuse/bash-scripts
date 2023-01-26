@@ -1,5 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2024
+# shellcheck disable=SC1143
 PROG=${0##*/}
 LOGFILE="$0.logfile"
 script_name=$0
@@ -34,7 +35,10 @@ cat <<EOF
                               custom Debian iso file, this must be a 
                               system path, use this option to further
                               customize the liveUSB like installing 
-                              kubernetes or docker or whatever!
+                              kubernetes or docker or whatever! This option
+                              can be used in place of --includes and
+                              --create_package_list to perform more 
+                              granular actions for customization
 
   --a, --architecture         debootstrap/grub ARCH (amd64,x86,arm)        (Default: amd64 )
 
@@ -52,11 +56,21 @@ cat <<EOF
 
   --p, --new_user_password    password for new debootstrap creations       (Default: password )
   
-  --m, --repository_mirror    debian mirror to use for apt in the chroot container (DEFAULT: "https://deb.debian.org/debian/" )
+  --m, --repository_mirror    debian mirror to use for apt in the chroot   (DEFAULT: "https://deb.debian.org/debian/" )
+                              container
   
   --v, --release              debian version to create/download            (DEFAULT: stable)
   
-  --e , --includes            Extra software to install in chroot for custom ISO (DEFAULT: linux-image-amd64,grub-pc,ssh,vim)
+  --e , --includes            Extra software to install for custom ISO     (DEFAULT: linux-image-amd64,grub-pc,ssh,vim)
+                              place "packages.txt" in same directory with
+                              newline delimited package names, a reference 
+                              file is provided in the release for your 
+                              convienience
+
+  n/a , --create_package_list creates a package.txt file in the directory the script is residing in
+                              for the user to modify to select new packages in custom iso generator
+                              use this option, alone, before crafting a command including the 
+                              "--includes" option. 
  
   --h, --show_help            Displays this help and exits
 
@@ -75,6 +89,8 @@ cat <<EOF
 
 EOF
 }
+required_options_error_message()
+{
 read -r -d '' empty_required_args_error_message<<'EOF'
 ###############################################################################
 [-]
@@ -98,7 +114,8 @@ read -r -d '' empty_required_args_error_message<<'EOF'
 [-]
 ###############################################################################
 EOF
-
+echo "$empty_required_args_error_message"
+}
 # put short options after -o without commas
 # put long options after --long, with commas
 # options that have arguments should have : after them, before the comma
@@ -106,16 +123,17 @@ short_opts="a:i:d:b:o:c:r:n:p:e:m:s:ugh"
 long_opts="architecture:,\
 iso_path:,\
 device:,\
-build_folder,\
-iso_output_location,\
-custom_iso_name,\
+build_folder:,\
+iso_output_location:,\
+custom_iso_name:,\
 use_debootstrap,\
-root_password,\
-new_username,\
-new_user_password,\
-includes,\
-repository_mirror,\
-chroot_script,\
+root_password:,\
+new_username:,\
+new_user_password:,\
+includes:,\
+repository_mirror:,\
+chroot_script:,\
+create_package_list,\
 get_new_iso,\
 help"
 #TEMP_OPTS=$(getopt -o a:i:d:gh: --long architecture:,iso_path:,device:,get_new_iso:,help -n 'create_live_usb' -- "$@")
@@ -151,7 +169,8 @@ while true; do
         --e | --includes)            includes="$2"; shift 2;;
         # repository to use for apt downloads
         --m | --repository_mirror)  repository_mirror="$2"; shift 2;;
-        # script to run in chroot after initial setup
+        # script to run in chroot after initial setup to allow more granular 
+        # customizations
         --s | --chroot_script)      chroot_script="$2"; shift 2;;
         # download new debian iso from internet
         --g | --get_new_iso)         get_new_iso;;
@@ -159,12 +178,14 @@ while true; do
         --u | --use-debootstrap)     use_debootstrap=true; shift 2 ;;
         # show the help heredocs
         --h | --show_help)           show_help; shift 2 ;;
+        # generate a package.txt for the user to modify to suit their needs
+        --create_package_list)   create_package_list ; shift 2 ;;
         # empty options get no action
         --  )                        shift; break ;;
         # no options at all get the help screen
         *   )                        show_help; break ;;
     esac
-done
+done  
 
 # this section is for arrays used when selecting extra sets of software to install in the live OS
 c_dev_package_list=("man-db" \
@@ -191,7 +212,7 @@ sudo apt-get install \
     binutils \
     debootstrap \
     squashfs-tools \
-    xorriso \
+    #xorriso \
     grub-pc-bin \
     grub-efi-amd64-bin \
     mtools
@@ -242,6 +263,20 @@ cecho ()
   tput sgr0 #Reset # Reset to normal.
 }
 
+# copied from:
+# https://www.baeldung.com/linux/bash-get-location-within-script
+SCRIPT_PATH="${BASH_SOURCE}"
+while [ -L "${SCRIPT_PATH}" ]; do
+  SCRIPT_DIR="$(cd -P "$(dirname "${SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
+  SCRIPT_PATH="$(readlink "${SCRIPT_PATH}")"
+  [[ ${SCRIPT_PATH} != /* ]] && SCRIPT_PATH="${SCRIPT_DIR}/${SCRIPT_PATH}"
+done
+SCRIPT_PATH="$(readlink -f "${SCRIPT_PATH}")"
+SCRIPT_DIR="$(cd -P "$(dirname -- "${SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
+
+cecho "[+] script path: $SCRIPT_PATH" "$green"
+cecho "[+] script directory: $SCRIPT_DIR" "$green"
+
 error_exit()
 {
 cecho "$1" "$red" 1>&2 >> "$LOGFILE"
@@ -258,6 +293,23 @@ cecho "[+] Run this program again with the operational arguments to perform the 
 exit
 }
 
+create_package_list_txt()
+{
+cat << EOF | tee "$SCRIPT_DIR/package.txt"
+# remove this line and type out the packages you wish to include, one item per line, with NO leading or trailing spaces
+EOF
+}
+
+# creates a list of files to download and install
+# only put github .deb release downloads in here
+create_download_list()
+
+{
+cat << EOF | tee "$SCRIPT_DIR/downloads.txt"
+wget https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.deb
+EOF
+
+}
 # creates temporary directories for mounting of partitions
 set_temp_dirs()
 {
@@ -301,7 +353,8 @@ else
     cecho "[-] Failed to mount image on new loop device, check the logfile" "$red"
     cecho "[-] EXITING!" "$red"
     exit
-fi }
+fi 
+}
 
 # create gpt partition table on iso image
 custom_create_partition_table_on_loop_device()
@@ -501,9 +554,11 @@ grub-pc-bin \
 grub2-common \
 git \
 thunar \
-nvim \
+nano \
 tmux \
 exa \
+linux-image-amd64 \
+ssh
 
 # The /etc/machine-id file contains the unique machine ID of the local system 
 # that is set during installation or boot. The machine ID is a single 
@@ -562,11 +617,24 @@ EOF
 }
 
 #######################################
+# reads packages.txt into variable 
+# turning newlines into spaces
+read_package_txt()
+{
+package_list=$(tr '\n' ' ' < "$SCRIPT_DIR/packages.txt")
+echo "$package_list"
+}
+
+#######################################
 # Installs software development tooling
 # param1: array of package names for apt install
-chroot_install_development_tooling()
+# param1: path to file of package names
+chroot_install_extras()
 {
 if [ "$1" == 1 ]; then
+# replace newlines with spaces in package list file
+#package_list=$(tr '\n' ' ' < "$1")
+
 cat << PACKAGES | sudo chroot "$build_folder"
 # switch to new user
 su - $new_username
@@ -574,29 +642,13 @@ su - $new_username
 # use sudo to cache password
 echo $new_user_password | sudo -S echo "Sudo password used to cache for operations"
 
-sudo apt install \
-$(
-    for s in "${1[@]}"
-    do
-      echo "$s \\"
-    done
-)
-
+wget https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.deb
+sudo dpkg -i ./nvim-linux64.deb
+sudo apt install $(read_package_txt)
 PACKAGES
 fi
 }
-test_array=("a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l")
-test_heredoc=$(cat << TEST | chroot $build_folder
-$(
-    for s in "${test_array[@]}"
-    do
-      #printf "%s \\" "$s \n"
-      echo "$s"
-    done
-)
-TEST
-)
-echo "$test_heredoc"
+
 teardown_chroot()
 {
 # unmount chroot pipelines
@@ -1011,7 +1063,8 @@ check_args()
 {
 if [ -z "$architecture" ] || [ -z "$iso_path" ] || [ -z "$device" ]
 then
-   echo "$empty_required_args_error_message"
+   required_options_error_message
+   #echo "$empty_required_args_error_message"
 else
     # setting defaults if options not given on command line
     if [ -z "$repository_mirror" ]
@@ -1026,8 +1079,10 @@ else
     fi
     if [ -z "$includes" ]
     then
-        # packages to include DURING debootstrap
-        includes="linux-image-amd64,grub-pc,ssh,vim"    
+        # packages to include DURING debootstrap, if this option is not given 
+        # on command line, the list will be what is declared at the top of the
+        # file in the "includes" variable
+        includes=read_package_txt
     fi
     if [ -z "$build_folder" ]
     then
