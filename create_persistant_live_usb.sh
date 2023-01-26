@@ -34,19 +34,22 @@ cat <<EOF
   --s, --chroot_script        script to run on chroot when generating a    (Default: NONE )
                               custom Debian iso file, this must be a 
                               system path, use this option to further
-                              customize the liveUSB like installing 
-                              kubernetes or docker or whatever! This option
+                              customize the liveUSB. This option
                               can be used in place of --includes and
                               --create_package_list to perform more 
                               granular actions for customization
 
-  --a, --architecture         debootstrap/grub ARCH (amd64,x86,arm)        (Default: amd64 )
+  --a, --architecture         debootstrap/grub ARCH (amd64,x86,arm)        (Required: Default: amd64 )
 
-  --f, --loop_device          loop device to create for mounting of images (DEFAULT: /dev/loop0)
+  --f, --loop_device          loop device to create for mounting of        (Default: /dev/loop0)
+                              images when using --use_debootstrap
 
-  --b, --build_folder         full system path to folder you want to build the iso in ( Default: /home/$USER/build_folder )
+  --b, --build_folder         full system path to folder you want to       (Default: /home/$USER/build_folder )
+                              build the iso in when using the flag
+                              --use_debootstrap
 
-  --o, --iso_output_location  location to put custom iso file              (Default: /home/$USER/build_folder )
+  --o, --iso_output_location  location to put custom iso file when         (Default: /home/$USER/build_folder )
+                              using --use_debootstrap
 
   --c, --custom_iso_name      custom name for custom iso                   (Default: custom_debian )
 
@@ -59,18 +62,20 @@ cat <<EOF
   --m, --repository_mirror    debian mirror to use for apt in the chroot   (DEFAULT: "https://deb.debian.org/debian/" )
                               container
   
-  --v, --release              debian version to create/download            (DEFAULT: stable)
+  --v, --release              debian version to create/download            ( DEFAULT: "stable" )
   
-  --e , --includes            Extra software to install for custom ISO     (DEFAULT: linux-image-amd64,grub-pc,ssh,vim)
+  --e , --includes            Install extra software for custom ISO,  
                               place "packages.txt" in same directory with
                               newline delimited package names, a reference 
                               file is provided in the release for your 
                               convienience
 
-  n/a , --create_package_list creates a package.txt file in the directory the script is residing in
-                              for the user to modify to select new packages in custom iso generator
-                              use this option, alone, before crafting a command including the 
-                              "--includes" option. 
+  n/a , --create_package_list creates a package.txt file in the directory 
+                              the script is residing in for the user to 
+                              modify to select new packages in custom iso
+                              generator.
+                              use this option, alone, before crafting a 
+                              command including the "--includes" flag
  
   --h, --show_help            Displays this help and exits
 
@@ -185,26 +190,7 @@ while true; do
         # no options at all get the help screen
         *   )                        show_help; break ;;
     esac
-done  
-
-# this section is for arrays used when selecting extra sets of software to install in the live OS
-c_dev_package_list=("man-db" \
-"manpages" \
-"manpages-dev" \
-"manpges-posix-dev" \
-"gdb" \
-"lldb" \
-"valgrind" \
-"strace" \
-"bison" \
-"flex" \
-"clang" \
-"clang-tidy" \
-"clang-format" \
-"astyle" \
-"cmake" \
-"cmake-doc" \
-)
+done
 
 install_prerequisite_packages()
 {
@@ -212,7 +198,6 @@ sudo apt-get install \
     binutils \
     debootstrap \
     squashfs-tools \
-    #xorriso \
     grub-pc-bin \
     grub-efi-amd64-bin \
     mtools
@@ -448,7 +433,7 @@ else
 fi
 
 # begin the pull and install
-if sudo debootstrap --arch "$architecture" --include="$includes" "$release" "$build_folder" "$repository_mirror" &>> $LOGFILE
+if sudo debootstrap --arch "$architecture" --include="$includes" "$release" "$build_folder" "$repository_mirror" &>> "$LOGFILE"
 then
     cecho "[+] Debootstrap has created an OS structure in the guest hierarchy" "$green"
 else
@@ -458,7 +443,7 @@ else
 fi
 
 # copy dns info to enable networking
-if sudo cp /etc/resolv.conf "$build_folder/etc/resolv.conf" &>> $LOGFILE
+if sudo cp /etc/resolv.conf "$build_folder/etc/resolv.conf" &>> "$LOGFILE"
 then
     cecho "[+] resolve.conf copied to guest" "$green"
 else
@@ -468,7 +453,7 @@ else
 fi
 
 # copy apt package sources
-if sudo cp /etc/apt/sources.list "$build_folder/etc/apt/" &>> $LOGFILE
+if sudo cp /etc/apt/sources.list "$build_folder/etc/apt/" &>> "$LOGFILE"
 then
     cecho "[+] sources.list copied to guest" "$green"
 else
@@ -536,7 +521,7 @@ apt-get install -y libterm-readline-gnu-perl systemd-sysv
 
 apt install --no-install-recommends -y install sudo debconf nano apt-transport-https ca-certificates curl gnupg lsb-release wget curl \
 xorg xinit openbox fluxbox gparted \
-casper \
+casper 
 lupin-casper \
 discover \
 laptop-detect \
@@ -952,7 +937,7 @@ enable_persistance()
 # https://unix.stackexchange.com/questions/282393/union-mount-on-linux
 cecho "[+] Adding Union mount line to conf " "$green"
 
-if echo "/ union" | sudo tee $temp_persist_dir/persistence.conf &>> "$LOGFILE"; then
+if echo "/ union" | sudo tee "$temp_persist_dir"/persistence.conf &>> "$LOGFILE"; then
     cecho "[+] Added union mounting to live USB for persistance " "$green"
 else
     cecho "[+] ERROR: Failed to, check the logfile" "$red"
@@ -972,7 +957,7 @@ install_grub_to_image()
 # if using ARM devices
 if [ "$architecture" == "ARM" ]; then
     cecho "[+] Installing GRUB2 for ${architecture} to ${device}" "$yellow"
-    if sudo grub-install --removable --target=arm-efi --boot-directory=$temp_live_dir/boot/ --efi-directory=$temp_efi_dir "${device}"
+    if sudo grub-install --removable --target=arm-efi --boot-directory="$temp_live_dir"/boot/ --efi-directory="$temp_efi_dir" "${device}"
     then
     #if [ "$?" = "0" ]; then
         cecho "[+] GRUB2 Install Finished Successfully!" "$green"
@@ -984,7 +969,7 @@ fi
 # if using x86
 if [ "$architecture" == "X86" ]; then
     cecho "[+] Installing GRUB2 for ${architecture} to ${device}" "$yellow"
-    if sudo grub-install --removable --target=i386-efi --boot-directory=$temp_live_dir/boot/ --efi-directory=$temp_efi_dir "${device}"
+    if sudo grub-install --removable --target=i386-efi --boot-directory="$temp_live_dir"/boot/ --efi-directory="$temp_efi_dir" "${device}"
     then
     #if [ "$?" = "0" ]; then
         cecho "[+] GRUB2 Install Finished Successfully!" "$green"
@@ -995,7 +980,7 @@ fi
 
 if [ "$architecture" == "x64" ]; then
     cecho "[+] Installing GRUB2 for ${architecture} to ${device}" "$yellow"
-    if sudo grub-install --removable --target=X86_64-efi --boot-directory=$temp_live_dir/boot/ --efi-directory=$temp_efi_dir "${device}"
+    if sudo grub-install --removable --target=X86_64-efi --boot-directory="$temp_live_dir"/boot/ --efi-directory="$temp_efi_dir" "${device}"
     then
     #if [ "$?" = "0" ]; then
         cecho "[+] GRUB2 Install Finished Successfully!" "$green"
@@ -1017,25 +1002,25 @@ dd bs=440 count=1 conv=notrunc if=/usr/lib/syslinux/mbr/gptmbr.bin of="${device}
 install_syslinux()
 {
 echo "${device}"2 | syslinux --install
-mv $temp_live_dir/isolinux $temp_live_dir/syslinux
-mv $temp_live_dir/syslinux/isolinux.bin $temp_live_dir/syslinux/syslinux.bin
-mv $temp_live_dir/syslinux/isolinux.cfg $temp_live_dir/syslinux/syslinux.cfg
+mv "$temp_live_dir"/isolinux "$temp_live_dir"/syslinux
+mv "$temp_live_dir"/syslinux/isolinux.bin "$temp_live_dir"/syslinux/syslinux.bin
+mv "$temp_live_dir"/syslinux/isolinux.cfg "$temp_live_dir"/syslinux/syslinux.cfg
 }
 
 # Magic, sets up syslinux configuration and layouts
 setup_boot_config()
 {
-sed --in-place 's#isolinux/splash#syslinux/splash#' $temp_live_dir/boot/grub/grub.cfg
-sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 persistence/}' $temp_live_dir/boot/grub/grub.cfg $temp_live_dir/syslinux/menu.cfg
-sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 keyboard-layouts=en locales=en_US/}' $temp_live_dir/boot/grub/grub.cfg $temp_live_dir/syslinux/menu.cfg
-sed --in-place 's#isolinux/splash#syslinux/splash#' $temp_live_dir/boot/grub/grub.cfg
+sed --in-place 's#isolinux/splash#syslinux/splash#' "$temp_live_dir"/boot/grub/grub.cfg
+sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 persistence/}' "$temp_live_dir"/boot/grub/grub.cfg "$temp_live_dir"/syslinux/menu.cfg
+sed --in-place '0,/boot=live/{s/\(boot=live .*\)$/\1 keyboard-layouts=en locales=en_US/}' "$temp_live_dir"/boot/grub/grub.cfg "$temp_live_dir"/syslinux/menu.cfg
+sed --in-place 's#isolinux/splash#syslinux/splash#' "$temp_live_dir"/boot/grub/grub.cfg
 }
 
 # Clean up!
 clean()
 {
-sudo umount $temp_efi_dir $temp_live_dir $temp_persist_dir $temp_live_iso_dir
-sudo rmdir $temp_efi_dir $temp_live_dir $temp_persist_dir $temp_live_iso_dir
+sudo umount "$temp_efi_dir" "$temp_live_dir" "$temp_persist_dir" "$temp_live_iso_dir"
+sudo rmdir "$temp_efi_dir" "$temp_live_dir" "$temp_persist_dir" "$temp_live_iso_dir"
 }
 
 #while getopts "a:l:d:g:h:v:" opt
