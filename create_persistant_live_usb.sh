@@ -194,6 +194,7 @@ done
 
 install_prerequisite_packages()
 {
+cecho "[+] Checking if all required packages are installed"
 sudo apt-get install \
     binutils \
     debootstrap \
@@ -616,7 +617,7 @@ echo "$package_list"
 # param1: path to file of package names
 chroot_install_extras()
 {
-if [ "$1" == 1 ]; then
+#if [ "$1" == 1 ]; then
 # replace newlines with spaces in package list file
 #package_list=$(tr '\n' ' ' < "$1")
 
@@ -631,7 +632,7 @@ wget https://github.com/neovim/neovim/releases/download/nightly/nvim-linux64.deb
 sudo dpkg -i ./nvim-linux64.deb
 sudo apt install $(read_package_txt)
 PACKAGES
-fi
+#fi
 }
 
 teardown_chroot()
@@ -1062,13 +1063,13 @@ else
         # debian version
         release="stable"   
     fi
-    if [ -z "$includes" ]
-    then
-        # packages to include DURING debootstrap, if this option is not given 
-        # on command line, the list will be what is declared at the top of the
-        # file in the "includes" variable
-        includes=read_package_txt
-    fi
+    #if [ -z "$includes" ]
+    #then
+    #    # packages to include DURING debootstrap, if this option is not given 
+    #    # on command line, the list will be what is declared at the top of the
+    #    # file in the "includes" variable
+    #    includes=read_package_txt
+    #fi
     if [ -z "$build_folder" ]
     then
         # folder to create and build iso inside of
@@ -1140,7 +1141,17 @@ custom_make_disk()
     # mounts all chroot requisite host directories in build folder
     mount_for_chroot
     # performs a chroot and creates new user and sets passwords
-    if chroot_buildup "$1" "$2" "$3";then
+    if chroot_buildup "$1" "$2" "$3"
+    then
+        if [ -z "$includes" ]
+        then
+            cecho "[+] Installing extra software" "$green"
+            chroot_install_extras
+        else
+            cecho "[+] Error: Failed during installation of extra software, check the logfile" "$red"
+            cecho "[+] You may have to finish without the extra packages, and/or use the --generate_iso_from_chroot flag" "$red"
+            exit
+        fi
         cecho "[+] Chroot finished" "$green"
     # unmounts all host directories from chroot to begin next step
     if teardown_chroot;then
@@ -1154,10 +1165,15 @@ custom_make_disk()
 }
 main()
 {
-    ###################################
-    #
-    # creates temporary work directories
+    # first things first, check all arguments to see if any defaults are 
+    # needing to be set
+    check_args
+    
+    # then we create temporary work directories
     set_temp_dirs
+
+    # then we install any required packages
+    
     install_prerequisite_packages
 
 ###############################################################################
